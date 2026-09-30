@@ -8,11 +8,25 @@ const khoaHocKhacCheck = document.getElementById('khoaHocKhacCheck');
 const khoaHocKhacWrap = document.getElementById('khoaHocKhacWrap');
 const khoaHocKhacInput = document.getElementById('khoaHocKhacInput');
 const qrBox = document.getElementById('qrBox');
+const khoaHocInputs = Array.from(form.querySelectorAll('input[name="khoaHoc"]'));
+
+function validateKhoaHoc() {
+  const hasSelection = khoaHocInputs.some((input) => input.checked) || khoaHocKhacCheck.checked;
+  khoaHocInputs[0].setCustomValidity(
+    hasSelection ? '' : 'Vui lòng chọn ít nhất một khóa học.'
+  );
+}
+
+khoaHocInputs.forEach((input) => input.addEventListener('change', validateKhoaHoc));
 
 khoaHocKhacCheck.addEventListener('change', () => {
   khoaHocKhacWrap.hidden = !khoaHocKhacCheck.checked;
+  khoaHocKhacInput.required = khoaHocKhacCheck.checked;
   if (!khoaHocKhacCheck.checked) khoaHocKhacInput.value = '';
+  validateKhoaHoc();
 });
+
+validateKhoaHoc();
 
 form.querySelectorAll('input[name="thanhToan"]').forEach((radio) => {
   radio.addEventListener('change', () => {
@@ -55,6 +69,12 @@ function buildPayload() {
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
+
+  validateKhoaHoc();
+  if (!form.reportValidity()) {
+    setStatus('Vui lòng điền đầy đủ các mục bắt buộc.', 'error');
+    return;
+  }
 
   if (!WEB_APP_URL || WEB_APP_URL.includes('PASTE_')) {
     setStatus('Chưa cấu hình WEB_APP_URL trong script.js. Xem README.md.', 'error');
