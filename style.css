@@ -289,3 +289,15 @@ textarea:focus {
   .card { padding: 24px 16px; }
   .card-header h1 { font-size: 1.35rem; }
 }
+
+/* Link đăng nhập nội bộ — cố ý mờ để khách không để ý */
+.staff-link {
+  display: block;
+  width: max-content;
+  margin: 20px auto 0;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.18);
+  text-decoration: none;
+}
+
+.staff-link:hover { color: rgba(255, 255, 255, 0.6); }

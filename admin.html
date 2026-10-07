@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Quản lý khách hàng - GOLD HOME - Edu</title>
+<link rel="icon" href="assets/logo.png" type="image/png">
+<link rel="stylesheet" href="admin.css">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+<div id="loginView" class="login-view">
+  <div class="login-card">
+    <img src="assets/logo.png" alt="GOLD HOME - Edu" class="login-logo">
+    <h1>Quản lý khách hàng</h1>
+    <p>Đăng nhập bằng tài khoản Google đã được cấp quyền.</p>
+    <div id="googleBtn" class="google-btn"></div>
+    <p id="loginStatus" class="login-status" role="alert"></p>
+    <a href="./" class="back-link">← Về trang đăng ký</a>
+  </div>
+</div>
+
+<div id="appView" hidden>
+  <header class="topbar">
+    <div class="brand">
+      <img src="assets/logo.png" alt="">
+      <strong>QUẢN LÝ KHÁCH HÀNG</strong>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button type="button" data-tab="leads" class="active">Khách hàng</button>
+      <button type="button" data-tab="activity" data-admin-only>Hoạt động</button>
+      <button type="button" data-tab="sales" data-admin-only>Sales</button>
+    </nav>
+    <div class="me">
+      <span id="meName"></span>
+      <span id="meRole" class="role"></span>
+      <button type="button" id="refreshBtn" class="btn ghost" title="Tải lại dữ liệu">Tải lại</button>
+      <button type="button" id="logoutBtn" class="btn ghost">Đăng xuất</button>
+    </div>
+  </header>
+
+  <main class="main">
+    <section id="tab-leads">
+      <div class="toolbar">
+        <input id="searchInput" class="search" type="search" inputmode="tel" autocomplete="off"
+               placeholder="Tìm theo số điện thoại hoặc tên khách...">
+        <button type="button" id="addBtn" class="btn primary">+ Thêm SĐT</button>
+      </div>
+
+      <div id="searchResult"></div>
+
+      <div id="stats" class="stats"></div>
+
+      <div class="filters">
+        <div id="chips" class="chips"></div>
+        <select id="saleFilter" class="sale-filter" aria-label="Lọc theo Sales"></select>
+      </div>
+
+      <div class="table-wrap">
+        <table class="leads">
+          <thead>
+            <tr>
+              <th>SĐT</th>
+              <th>Khách hàng</th>
+              <th>Sales phụ trách</th>
+              <th>Trạng thái</th>
+              <th>Lần chăm sóc cuối</th>
+              <th>Hẹn gọi lại</th>
+              <th>Ghi chú</th>
+            </tr>
+          </thead>
+          <tbody id="leadRows"></tbody>
+        </table>
+      </div>
+      <p id="listInfo" class="list-info"></p>
+    </section>
+
+    <section id="tab-activity" hidden>
+      <h2 class="section-title">Hoạt động gần đây</h2>
+      <div id="activityList" class="timeline"></div>
+    </section>
+
+    <section id="tab-sales" hidden>
+      <h2 class="section-title">Sales</h2>
+      <div class="table-wrap">
+        <table class="plain">
+          <thead>
+            <tr>
+              <th>Tên</th>
+              <th>Email</th>
+              <th>Quyền</th>
+              <th>Đang chăm sóc</th>
+              <th>Gọi lại hôm nay</th>
+              <th>Đã chốt</th>
+            </tr>
+          </thead>
+          <tbody id="salesRows"></tbody>
+        </table>
+      </div>
+      <p class="list-info">Thêm / khoá tài khoản trong tab <strong>Users</strong> của Google Sheet.</p>
+    </section>
+  </main>
+</div>
+
+<dialog id="leadDialog" class="dialog">
+  <div id="leadDialogBody"></div>
+</dialog>
+
+<dialog id="addDialog" class="dialog">
+  <form id="addForm" class="dialog-inner" novalidate>
+    <div class="dialog-head">
+      <h2>Thêm số điện thoại</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Đóng">×</button>
+    </div>
+    <label class="field">
+      <span>Số điện thoại <span class="req">*</span></span>
+      <input name="phone" type="tel" inputmode="tel" autocomplete="off" required>
+    </label>
+    <div id="addPhoneCheck"></div>
+    <label class="field">
+      <span>Tên khách hàng</span>
+      <input name="customerName" type="text" autocomplete="off">
+    </label>
+    <label class="field">
+      <span>Ghi chú</span>
+      <textarea name="note" rows="3"></textarea>
+    </label>
+    <label class="check">
+      <input name="claim" type="checkbox" checked>
+      <span>Tôi nhận chăm sóc số này</span>
+    </label>
+    <div class="dialog-actions">
+      <button type="button" class="btn ghost" data-close>Huỷ</button>
+      <button type="submit" class="btn primary" id="addSubmit">Thêm khách</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" role="status" hidden></div>
+
+<script src="admin.js"></script>
+</body>
+</html>
