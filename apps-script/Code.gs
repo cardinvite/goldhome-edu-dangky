@@ -35,6 +35,7 @@ function doPost(e) {
 
   // Tự thêm SĐT vào danh sách khách (tab Leads). Lỗi ở đây không được làm hỏng form.
   try {
+    invalidateCache_('regs');
     addLeadFromRegistration_(p);
   } catch (err) {
     console.error(err);

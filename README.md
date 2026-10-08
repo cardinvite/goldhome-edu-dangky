@@ -51,12 +51,23 @@ Trang nội bộ cho Sales/Admin quản lý SĐT khách: ai đang chăm sóc, tr
 lại, lịch sử. Vào bằng link mờ **"Nội bộ"** ở cuối trang đăng ký (hoặc mở thẳng `admin.html`),
 đăng nhập bằng Google. Chỉ email có trong tab **Users** của Sheet mới vào được.
 
+- **2 mảng: Đào tạo / Xây dựng** — chọn ở đầu tab Khách hàng. Mỗi mảng là một danh sách riêng
+  (bộ đếm, lọc, lịch sử riêng). Cùng một SĐT có thể là khách của cả 2 mảng với sales/trạng thái
+  riêng; chỉ chống trùng trong cùng một mảng. Mọi sales đều xem được cả 2 mảng. Khách từ form
+  đăng ký và dữ liệu cũ (cột `segment` trống) thuộc **Đào tạo**.
+- **Trạng thái chăm sóc** do ADMIN quản lý ở tab **Trạng thái** (lưu trong tab `Statuses` của Sheet).
+  3 trạng thái hệ thống `NEW`, `CALLING`, `CLOSED` chỉ đổi được tên/màu. Xoá trạng thái đang có khách
+  thì chọn trạng thái thay thế (có ghi lịch sử).
 - Dữ liệu nằm trong cùng Google Sheet, 3 tab tự tạo: **Leads** (mỗi SĐT một dòng, không trùng),
   **Activities** (lịch sử, chỉ ghi thêm), **Users** (danh sách được phép đăng nhập).
 - Khách điền form đăng ký có SĐT → tự thêm vào **Leads** với trạng thái "Chưa chăm sóc".
 - Sales không có quyền mở Sheet, mọi thao tác đi qua Apps Script (kiểm tra quyền + `LockService`
   chống 2 Sales nhận cùng một số).
 - Trang tự tải lại dữ liệu mỗi 60 giây (khi không mở hộp thoại).
+- **Tốc độ**: mở trang hiện ngay dữ liệu lần trước (lưu trên trình duyệt, xoá khi Đăng xuất) rồi cập
+  nhật ngầm. Apps Script cache dữ liệu 10 phút và trigger `warmCache` (5 phút/lần, do `setupAdmin`
+  tạo) nạp sẵn cache. Mọi thao tác trên trang xoá cache ngay; **sửa tay trong Sheet** thì bấm
+  **Tải lại** để thấy ngay.
 
 ### Cài đặt (một lần)
 
@@ -88,7 +99,9 @@ lại, lịch sử. Vào bằng link mờ **"Nội bộ"** ở cuối trang đă
    chủ Sheet làm ADMIN.
 4. **Deploy → Manage deployments → bút chì → Version: New version → Deploy** (giữ nguyên URL).
 
-**4. Thêm người dùng** — mở tab **Users**, mỗi người một dòng:
+**4. Thêm người dùng** — sau khi đăng nhập bằng tài khoản ADMIN, vào tab **Sales** trên trang
+admin để **Thêm / Sửa / Khoá / Xoá** sales (xoá sales đang phụ trách khách thì chọn người nhận lại
+khách). Hoặc sửa trực tiếp tab **Users** trong Sheet, mỗi người một dòng:
 
 | email | name | role | active |
 |---|---|---|---|
@@ -106,6 +119,9 @@ lại, lịch sử. Vào bằng link mờ **"Nội bộ"** ở cuối trang đă
 | Nhận chăm sóc số chưa ai nhận | ✓ | ✓ |
 | Cập nhật trạng thái, ghi chú, hẹn gọi lại | chỉ số mình phụ trách | mọi số |
 | Chuyển khách giữa Sales | | ✓ |
+| Thêm / sửa / khoá / xoá tài khoản (tab Sales) | | ✓ |
+| Thêm / sửa / ẩn / xoá / sắp xếp trạng thái chăm sóc (tab Trạng thái) | | ✓ |
+| Tab Đăng ký (dữ liệu form, tab `DangKy`) | ✓ (CCCD, địa chỉ bị che) | ✓ đầy đủ + Xuất CSV |
 | Tab Hoạt động (lịch sử toàn hệ thống), tab Sales | | ✓ |
 
 ### Phiên đăng nhập

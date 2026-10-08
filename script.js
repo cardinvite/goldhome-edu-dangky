@@ -1,5 +1,5 @@
 // Dán URL Web App (lấy sau khi Deploy Apps Script) vào đây — xem README.md
-const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwgFz4eT7G7x2gzwkDwfCk3QCFNueiCcMxHkIho3Fch58l39-VmxqESQJvxVvxt20NRNA/exec';
+const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbz6dZx1Di5-LRpmnewqeWIsMB3TK6pk1q9R9ucmWE0BN0rFVm-hdcJTM2ZwxNO29qdqYw/exec';
 
 const form = document.getElementById('regForm');
 const statusEl = document.getElementById('formStatus');

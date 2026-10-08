@@ -30,19 +30,24 @@
     </div>
     <nav class="tabs" id="tabs">
       <button type="button" data-tab="leads" class="active">Khách hàng</button>
+      <button type="button" data-tab="registrations">Đăng ký</button>
       <button type="button" data-tab="activity" data-admin-only>Hoạt động</button>
       <button type="button" data-tab="sales" data-admin-only>Sales</button>
+      <button type="button" data-tab="statuses" data-admin-only>Trạng thái</button>
     </nav>
     <div class="me">
       <span id="meName"></span>
       <span id="meRole" class="role"></span>
-      <button type="button" id="refreshBtn" class="btn ghost" title="Tải lại dữ liệu">Tải lại</button>
+      <span id="syncStatus" class="sync-status" hidden>Đang cập nhật…</span>
+      <button type="button" id="refreshBtn" class="btn ghost" title="Đọc lại dữ liệu mới nhất từ Google Sheet">Tải lại</button>
       <button type="button" id="logoutBtn" class="btn ghost">Đăng xuất</button>
     </div>
   </header>
 
   <main class="main">
     <section id="tab-leads">
+      <div id="segmentTabs" class="segments" role="tablist" aria-label="Mảng kinh doanh"></div>
+
       <div class="toolbar">
         <input id="searchInput" class="search" type="search" inputmode="tel" autocomplete="off"
                placeholder="Tìm theo số điện thoại hoặc tên khách...">
@@ -77,20 +82,66 @@
       <p id="listInfo" class="list-info"></p>
     </section>
 
+    <section id="tab-registrations" hidden>
+      <div class="toolbar">
+        <input id="regSearch" class="search" type="search" autocomplete="off"
+               placeholder="Tìm theo tên, SĐT, tên Zalo, khóa học...">
+        <button type="button" id="regExport" class="btn ghost" data-admin-only>Xuất CSV</button>
+      </div>
+
+      <div class="filters">
+        <div id="regRangeChips" class="chips"></div>
+      </div>
+      <div class="reg-selects">
+        <select id="regCourse" aria-label="Lọc theo khóa học"></select>
+        <select id="regMode" aria-label="Lọc theo hình thức học"></select>
+        <select id="regPayment" aria-label="Lọc theo thanh toán"></select>
+      </div>
+
+      <div class="table-wrap">
+        <table class="leads">
+          <thead>
+            <tr>
+              <th>Thời gian</th>
+              <th>Họ và tên</th>
+              <th>SĐT</th>
+              <th>Tên Zalo</th>
+              <th>Khóa học</th>
+              <th>Hình thức học</th>
+              <th>Thanh toán</th>
+              <th>Chăm sóc</th>
+            </tr>
+          </thead>
+          <tbody id="regRows"></tbody>
+        </table>
+      </div>
+      <p id="regInfo" class="list-info"></p>
+    </section>
+
     <section id="tab-activity" hidden>
       <h2 class="section-title">Hoạt động gần đây</h2>
       <div id="activityList" class="timeline"></div>
     </section>
 
     <section id="tab-sales" hidden>
-      <h2 class="section-title">Sales</h2>
+      <div class="section-head">
+        <h2 class="section-title">Sales</h2>
+        <button type="button" class="btn primary" data-user-new>+ Thêm sales</button>
+      </div>
       <div class="table-wrap">
         <table class="plain">
           <thead>
             <tr>
-              <th>Tên</th>
-              <th>Email</th>
-              <th>Quyền</th>
+              <th rowspan="2">Tên</th>
+              <th rowspan="2">Quyền</th>
+              <th colspan="3" class="group DAO_TAO">Đào tạo</th>
+              <th colspan="3" class="group XAY_DUNG">Xây dựng</th>
+              <th rowspan="2"></th>
+            </tr>
+            <tr>
+              <th>Đang chăm sóc</th>
+              <th>Gọi lại hôm nay</th>
+              <th>Đã chốt</th>
               <th>Đang chăm sóc</th>
               <th>Gọi lại hôm nay</th>
               <th>Đã chốt</th>
@@ -99,7 +150,33 @@
           <tbody id="salesRows"></tbody>
         </table>
       </div>
-      <p class="list-info">Thêm / khoá tài khoản trong tab <strong>Users</strong> của Google Sheet.</p>
+      <p class="list-info">Email là tài khoản Google dùng để đăng nhập. Khoá = tạm thời không cho đăng nhập
+        (giữ nguyên khách đang phụ trách); Xoá = bỏ hẳn tài khoản và chuyển khách cho người khác.</p>
+    </section>
+    <section id="tab-statuses" hidden>
+      <div class="section-head">
+        <h2 class="section-title">Trạng thái chăm sóc</h2>
+        <button type="button" class="btn primary" data-status-new>+ Thêm trạng thái</button>
+      </div>
+      <div class="table-wrap">
+        <table class="plain">
+          <thead>
+            <tr>
+              <th>Thứ tự</th>
+              <th>Hiển thị</th>
+              <th>Mã</th>
+              <th>Kết thúc chăm sóc</th>
+              <th>Số khách (ĐT / XD)</th>
+              <th>Sử dụng</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="statusRows"></tbody>
+        </table>
+      </div>
+      <p class="list-info">Thứ tự ở đây là thứ tự trong ô chọn trạng thái và bộ lọc. "Kết thúc chăm sóc" = khách
+        không còn tính là đang chăm sóc và không hiện trong "Gọi lại hôm nay". Trạng thái 🔒 là trạng thái hệ thống:
+        chỉ đổi được tên và màu.</p>
     </section>
   </main>
 </div>
@@ -108,10 +185,22 @@
   <div id="leadDialogBody"></div>
 </dialog>
 
+<dialog id="regDialog" class="dialog">
+  <div id="regDialogBody"></div>
+</dialog>
+
+<dialog id="userDialog" class="dialog">
+  <div id="userDialogBody"></div>
+</dialog>
+
+<dialog id="statusDialog" class="dialog">
+  <div id="statusDialogBody"></div>
+</dialog>
+
 <dialog id="addDialog" class="dialog">
   <form id="addForm" class="dialog-inner" novalidate>
     <div class="dialog-head">
-      <h2>Thêm số điện thoại</h2>
+      <h2 id="addTitle">Thêm số điện thoại</h2>
       <button type="button" class="icon-btn" data-close aria-label="Đóng">×</button>
     </div>
     <label class="field">
