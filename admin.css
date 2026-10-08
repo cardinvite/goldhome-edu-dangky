@@ -311,7 +311,6 @@ td.overdue { color: var(--red); font-weight: 600; }
 .notice.green { background: var(--green-bg); color: var(--green); font-weight: 600; }
 .notice.orange { background: var(--orange-bg); color: var(--orange); }
 
-.assign-row { display: flex; gap: 8px; margin-bottom: 14px; }
 
 .update-form { border-top: 1px solid var(--border); padding-top: 14px; }
 .quick { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 14px; }

@@ -255,6 +255,39 @@ function upsertLead(lead) {
   saveSnapshot();
 }
 
+function removeLead(segment, phone) {
+  state.leads = state.leads.filter((l) => !(l.segment === segment && l.phone === phone));
+  saveSnapshot();
+}
+
+// Thao tác đang gửi lên máy chủ: "<segment>|<phone>" → bản khách đã hiện trước trên giao diện.
+const pendingLeads = new Map();
+// Khách thêm thành công trong phiên này (để danh sách tải về muộn không làm "mất" khách vừa thêm).
+const createdLeads = new Set();
+
+// Ghép danh sách vừa tải về với dữ liệu trên trang. Lần tải có thể gửi đi trước khi một thao tác
+// lưu xong nhưng về sau → mang bản cũ. Vì vậy giữ bản trên trang khi:
+// - khách đang chờ lưu, hoặc
+// - bản trên trang có updated_at mới hơn (máy chủ đã xác nhận thay đổi sau thời điểm đọc).
+function mergeFetched(leads) {
+  const local = new Map(state.leads.map((l) => [l.segment + '|' + l.phone, l]));
+  const out = leads.map((l) => {
+    const key = l.segment + '|' + l.phone;
+    if (pendingLeads.has(key)) return pendingLeads.get(key);
+    const mine = local.get(key);
+    return mine && timeOf(mine.updated_at) > timeOf(l.updated_at) ? mine : l;
+  });
+  const keys = new Set(out.map((l) => l.segment + '|' + l.phone));
+  pendingLeads.forEach((lead, key) => { if (!keys.has(key)) out.unshift(lead); });
+  createdLeads.forEach((key) => { if (!keys.has(key) && local.has(key)) out.unshift(local.get(key)); });
+  return out;
+}
+
+function timeOf(value) {
+  const t = value ? new Date(value).getTime() : 0;
+  return Number.isNaN(t) ? 0 : t;
+}
+
 // ---------- Auth ----------
 
 // Phiên do Apps Script cấp sau khi xác minh Google (hạn SESSION_DAYS trong Admin.gs),
@@ -304,7 +337,7 @@ function applyInit(data) {
   state.me = data.me;
   state.users = data.users;
   applyStatuses(data.statuses);
-  state.leads = data.leads;
+  state.leads = mergeFetched(data.leads);
   showApp();
 }
 
@@ -560,6 +593,9 @@ function renderLeads() {
   else if (list.length > shown.length) info = `Hiển thị ${shown.length}/${list.length} khách — dùng tìm kiếm hoặc bộ lọc để thu hẹp.`;
   else if (state.query.trim()) info = `Tìm thấy ${list.length} khách (trong toàn bộ mảng ${segLabel(state.segment)}).`;
   $('listInfo').textContent = info;
+  // Tab khác cũng hiện sale phụ trách → vẽ lại nếu đang mở.
+  if (state.tab === 'sales') renderSalesTab();
+  if (state.tab === 'registrations' && state.regs) renderRegs();
 }
 
 // fresh = bỏ qua cache phía server (nút "Tải lại").
@@ -568,7 +604,7 @@ async function refresh(silent = false, fresh = false) {
   try {
     const data = await api('list', { fresh });
     applyStatuses(data.statuses);
-    state.leads = data.leads;
+    state.leads = mergeFetched(data.leads);
     renderLeads();
     saveSnapshot();
     if (!silent) toast('Đã tải lại dữ liệu.');
@@ -608,15 +644,20 @@ function renderLeadDialog(lead) {
     assignment = `<div class="notice orange"><span>Đang được <strong>${esc(userName(lead.assigned_email))}</strong> chăm sóc.</span></div>`;
   }
 
+  // Người đang phụ trách luôn có trong danh sách (kể cả đã khoá), để LƯU không vô tình bỏ người đó.
+  const assignees = state.users.filter((u) => u.active || u.email === lead.assigned_email);
+  if (lead.assigned_email && !assignees.some((u) => u.email === lead.assigned_email)) {
+    assignees.push({ email: lead.assigned_email, name: lead.assigned_email, active: false });
+  }
   const adminAssign = isAdmin ? `
-    <div class="assign-row">
-      <select id="assignSelect" aria-label="Chuyển cho Sales">
-        <option value="">— Chưa ai —</option>
-        ${state.users.filter((u) => u.active).map((u) => `
-          <option value="${esc(u.email)}" ${u.email === lead.assigned_email ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}
-      </select>
-      <button type="button" class="btn ghost" data-assign="${esc(lead.phone)}" data-seg="${esc(lead.segment)}">Chuyển khách</button>
-    </div>` : '';
+      <label class="field">
+        <span>Sales phụ trách</span>
+        <select name="assignedEmail">
+          <option value="">— Chưa ai nhận —</option>
+          ${assignees.map((u) => `
+            <option value="${esc(u.email)}" ${u.email === lead.assigned_email ? 'selected' : ''}>${esc(u.name)}${u.active ? '' : ' (đã khoá)'}</option>`).join('')}
+        </select>
+      </label>` : '';
 
   const statusOptions = Object.keys(STATUS)
     .filter((key) => STATUS[key].active !== false || key === lead.status)
@@ -630,6 +671,7 @@ function renderLeadDialog(lead) {
         <span>Tên khách hàng</span>
         <input name="customerName" type="text" value="${esc(lead.customer_name)}" autocomplete="off">
       </label>
+      ${adminAssign}
       <label class="field">
         <span>Trạng thái</span>
         <select name="status">${statusOptions}</select>
@@ -670,7 +712,6 @@ function renderLeadDialog(lead) {
           · ${o.assigned_email ? esc(userName(o.assigned_email)) : 'Chưa ai nhận'}
           <button type="button" class="link" data-open="${esc(o.phone)}" data-seg="${esc(o.segment)}">Mở</button></div>`).join('')}
       ${assignment}
-      ${adminAssign}
       ${form}
       <h3 class="history-title">Lịch sử chăm sóc</h3>
       <div id="historyList" class="timeline"><p class="muted">Đang tải...</p></div>
@@ -740,19 +781,81 @@ function handleLeadError(err) {
   toast(err.message, 'error');
 }
 
-async function runLeadAction(button, action, params, successMessage) {
-  button.disabled = true;
+function isOpenLead(lead) {
+  return $('leadDialog').open && state.openKey === lead.segment + '|' + lead.phone;
+}
+
+// Hiện kết quả ngay trên giao diện (predict), gửi lên máy chủ trong nền; máy chủ trả lỗi
+// (VD: người khác vừa nhận) thì quay về dữ liệu máy chủ / dữ liệu cũ.
+async function runLeadAction(action, params, successMessage, predict) {
+  const key = params.segment + '|' + params.phone;
+  if (pendingLeads.has(key)) {
+    toast('Đang lưu thao tác trước của khách này, đợi giây lát…');
+    return;
+  }
+  const before = findLead(params.segment, params.phone);
+  if (!before) return;
+  const guess = predict({ ...before, updated_at: new Date().toISOString() });
+  pendingLeads.set(key, guess);
+  upsertLead(guess);
+  renderLeads();
+  if (isOpenLead(guess)) {
+    const history = $('historyList')?.innerHTML;
+    renderLeadDialog(guess);
+    if (history) $('historyList').innerHTML = history;
+  }
+  toast('Đang lưu…');
+  setSyncing(true);
   try {
     const data = await api(action, params);
+    pendingLeads.delete(key);
     upsertLead(data.lead);
     renderLeads();
-    if ($('leadDialog').open) openLead(data.lead.segment, data.lead.phone);
+    // Không vẽ lại form (người dùng có thể đang gõ tiếp) — chỉ tải lại lịch sử.
+    if (isOpenLead(data.lead)) loadHistory(data.lead.segment, data.lead.phone);
     toast(successMessage, 'success');
   } catch (err) {
+    pendingLeads.delete(key);
+    if (!err.data?.lead) {
+      upsertLead(before);
+      renderLeads();
+      if (isOpenLead(before)) openLead(before.segment, before.phone);
+    }
     handleLeadError(err);
   } finally {
-    button.disabled = false;
+    setSyncing(false);
   }
+}
+
+function claimLead(segment, phone) {
+  runLeadAction('claim', { segment, phone }, 'Đã nhận chăm sóc.', (l) => {
+    l.assigned_email = state.me.email;
+    l.assigned_name = state.me.name;
+    if (l.status === 'NEW') l.status = 'CALLING';
+    return l;
+  });
+}
+
+function updateLead(form) {
+  const values = {
+    customerName: form.customerName.value.trim(),
+    status: form.status.value,
+    note: form.note.value.trim(),
+    followupAt: form.followupAt.value ? new Date(form.followupAt.value).toISOString() : '',
+  };
+  if (form.assignedEmail) values.assignedEmail = form.assignedEmail.value; // chỉ ADMIN có ô này
+  runLeadAction('update', { segment: form.dataset.seg, phone: form.dataset.phone, ...values }, 'Đã lưu.', (l) => {
+    if (values.status !== l.status || values.note !== (l.note || '')) l.last_contacted_at = l.updated_at;
+    l.customer_name = values.customerName;
+    l.status = values.status;
+    l.note = values.note;
+    l.next_followup_at = values.followupAt;
+    if (values.assignedEmail !== undefined) {
+      l.assigned_email = values.assignedEmail;
+      l.assigned_name = values.assignedEmail ? userName(values.assignedEmail) : '';
+    }
+    return l;
+  });
 }
 
 function quickFollowup(kind) {
@@ -809,37 +912,74 @@ function checkAddPhone() {
   else box.innerHTML = '';
 }
 
+// Thêm ngay vào danh sách và đóng hộp thoại; máy chủ báo trùng/lỗi thì gỡ ra.
 async function submitAdd(event) {
   event.preventDefault();
   const form = $('addForm');
   const phone = normalizePhone(form.phone.value);
   if (!phone) return;
   const segment = form.dataset.segment;
-  $('addSubmit').disabled = true;
+  const key = segment + '|' + phone;
+  if (pendingLeads.has(key)) return;
+  const params = {
+    segment,
+    phone,
+    customerName: form.customerName.value.trim(),
+    note: form.note.value.trim(),
+    claim: form.claim.checked,
+  };
+  const now = new Date().toISOString();
+  const guess = {
+    phone,
+    segment,
+    customer_name: params.customerName,
+    note: params.note,
+    assigned_email: params.claim ? state.me.email : '',
+    assigned_name: params.claim ? state.me.name : '',
+    status: params.claim ? 'CALLING' : 'NEW',
+    last_contacted_at: '',
+    next_followup_at: '',
+    created_at: now,
+    updated_at: now,
+    source: 'Nhập tay',
+    created_by: state.me.email,
+  };
+  pendingLeads.set(key, guess);
+  upsertLead(guess);
+  $('addDialog').close();
+  setSegment(segment);
+  state.query = '';
+  $('searchInput').value = '';
+  renderLeads();
+  toast('Đang lưu…');
+  setSyncing(true);
   try {
-    const data = await api('create', {
-      segment,
-      phone,
-      customerName: form.customerName.value,
-      note: form.note.value,
-      claim: form.claim.checked,
-    });
+    const data = await api('create', params);
+    pendingLeads.delete(key);
+    createdLeads.add(key);
     upsertLead(data.lead);
-    $('addDialog').close();
-    setSegment(segment);
-    state.query = '';
-    $('searchInput').value = '';
     renderLeads();
     toast(`Đã thêm ${phone} vào mảng ${segLabel(segment)}`, 'success');
   } catch (err) {
+    pendingLeads.delete(key);
+    removeLead(segment, phone);
     if (err.code === 'DUPLICATE' && err.data?.lead) {
+      // Người khác vừa thêm số này trước: hiện khách đó.
       upsertLead(err.data.lead);
       renderLeads();
-      $('addPhoneCheck').innerHTML = duplicateBox(err.data.lead);
-    } else {
       toast(err.message, 'error');
-      $('addSubmit').disabled = false;
+      if (!document.querySelector('dialog[open]')) openLead(segment, phone);
+    } else {
+      renderLeads();
+      toast(err.message, 'error');
+      if (!document.querySelector('dialog[open]')) {
+        openAddDialog(phone, params.customerName, segment);
+        form.note.value = params.note;
+        form.claim.checked = params.claim;
+      }
     }
+  } finally {
+    setSyncing(false);
   }
 }
 
@@ -1388,7 +1528,7 @@ function switchTab(tab) {
 // ---------- Sự kiện ----------
 
 document.addEventListener('click', (event) => {
-  const el = event.target.closest('[data-filter],[data-open],[data-add-phone],[data-close],[data-claim],[data-assign],[data-copy],[data-quick],[data-tab],[data-reg],[data-reg-range],[data-segment],[data-user-new],[data-user-edit],[data-user-del],[data-status-new],[data-status-edit],[data-status-del],[data-status-move]');
+  const el = event.target.closest('[data-filter],[data-open],[data-add-phone],[data-close],[data-claim],[data-copy],[data-quick],[data-tab],[data-reg],[data-reg-range],[data-segment],[data-user-new],[data-user-edit],[data-user-del],[data-status-new],[data-status-edit],[data-status-del],[data-status-move]');
   if (!el) return;
   const d = el.dataset;
 
@@ -1426,10 +1566,8 @@ document.addEventListener('click', (event) => {
     openAddDialog(d.addPhone, d.addName || '', d.seg || state.segment);
   }
   else if ('close' in d) el.closest('dialog').close();
-  else if (d.claim) runLeadAction(el, 'claim', { segment: d.seg, phone: d.claim }, 'Đã nhận chăm sóc.');
-  else if (d.assign) {
-    runLeadAction(el, 'assign', { segment: d.seg, phone: d.assign, assignedEmail: $('assignSelect').value }, 'Đã chuyển khách.');
-  } else if (d.copy) {
+  else if (d.claim) claimLead(d.seg, d.claim);
+  else if (d.copy) {
     navigator.clipboard?.writeText(d.copy).then(() => toast('Đã copy ' + d.copy));
   } else if (d.quick) {
     $('updateForm').followupAt.value = d.quick === 'clear' ? '' : quickFollowup(d.quick);
@@ -1450,16 +1588,7 @@ document.addEventListener('submit', (event) => {
   }
   if (event.target.id !== 'updateForm') return;
   event.preventDefault();
-  const form = event.target;
-  const followup = form.followupAt.value ? new Date(form.followupAt.value).toISOString() : '';
-  runLeadAction(form.querySelector('[type=submit]'), 'update', {
-    segment: form.dataset.seg,
-    phone: form.dataset.phone,
-    customerName: form.customerName.value,
-    status: form.status.value,
-    note: form.note.value,
-    followupAt: followup,
-  }, 'Đã lưu.');
+  updateLead(event.target);
 });
 
 $('searchInput').addEventListener('input', (event) => {
@@ -1509,6 +1638,14 @@ setInterval(() => {
 
 document.addEventListener('visibilitychange', () => {
   if (state.me && !document.hidden && !document.querySelector('dialog[open]')) refresh(true);
+});
+
+// Đóng tab khi còn thao tác chưa lưu xong thì hỏi lại.
+window.addEventListener('beforeunload', (event) => {
+  if (pendingLeads.size) {
+    event.preventDefault();
+    event.returnValue = '';
+  }
 });
 
 // ---------- Khởi động ----------

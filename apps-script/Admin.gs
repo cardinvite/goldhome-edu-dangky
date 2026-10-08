@@ -51,7 +51,7 @@ var DEFAULT_STATUSES = [
   ['INVALID', 'Số sai / Không hợp lệ', 'dark', true]
 ];
 
-// Cache đọc (CacheService) — mọi thao tác ghi qua withLock_ đều xoá cache "leads",
+// Cache đọc (CacheService) — mọi thao tác ghi qua withLock_ đều cập nhật/xoá cache "leads",
 // nên chỉ trường hợp sửa tay trực tiếp trong Sheet mới thấy dữ liệu cũ (tối đa CACHE_SECONDS,
 // hoặc bấm "Tải lại" trên trang để đọc thẳng Sheet). Users giữ ngắn để khoá tài khoản có hiệu lực nhanh.
 var CACHE_SECONDS = { leads: 600, statuses: 600, regs: 600, users: 60 };
@@ -572,6 +572,22 @@ function updateLead_(body, user) {
     var noteChanged = false;
     var followupChanged = false;
     var extra = [];
+    var assignNote = '';
+
+    // ADMIN chuyển sales phụ trách ngay trong form (cùng lần LƯU).
+    if (body.assignedEmail !== undefined) {
+      var email = String(body.assignedEmail || '').trim().toLowerCase();
+      if (email !== lead.assigned_email) {
+        if (!isAdmin) throw new ApiError('FORBIDDEN', 'Chỉ ADMIN được chuyển khách.');
+        if (email) {
+          var target = findUser_(email);
+          if (!target || !target.active) throw new ApiError('BAD_REQUEST', 'Sales không tồn tại hoặc đã khoá.');
+        }
+        assignNote = 'Chuyển: ' + (lead.assigned_email ? nameOf_(lead.assigned_email) : 'Chưa ai')
+          + ' → ' + (email ? nameOf_(email) : 'Chưa ai');
+        lead.assigned_email = email;
+      }
+    }
 
     if (body.status !== undefined && body.status !== lead.status) {
       var st = statusMap_()[body.status];
@@ -609,7 +625,8 @@ function updateLead_(body, user) {
       }
     }
 
-    if (!statusChanged && !noteChanged && !followupChanged && !extra.length) {
+    var otherChanged = statusChanged || noteChanged || followupChanged || extra.length;
+    if (!otherChanged && !assignNote) {
       return { lead: serializeLead_(lead) };
     }
 
@@ -618,10 +635,13 @@ function updateLead_(body, user) {
     lead.updated_at = now;
     writeLead_(lead);
 
-    var logLines = noteChanged ? [lead.note || '(Xoá ghi chú)'] : [];
-    logActivity_(lead, user, 'UPDATE',
-      statusChanged ? oldStatus : '', statusChanged ? lead.status : '',
-      logLines.concat(extra).join('\n'), followupChanged ? (lead.next_followup_at || 'CLEARED') : '', '');
+    if (assignNote) logActivity_(lead, user, 'ASSIGN', '', '', assignNote, '', lead.assigned_email);
+    if (otherChanged) {
+      var logLines = noteChanged ? [lead.note || '(Xoá ghi chú)'] : [];
+      logActivity_(lead, user, 'UPDATE',
+        statusChanged ? oldStatus : '', statusChanged ? lead.status : '',
+        logLines.concat(extra).join('\n'), followupChanged ? (lead.next_followup_at || 'CLEARED') : '', '');
+    }
     return { lead: serializeLead_(lead) };
   });
 }
@@ -903,11 +923,15 @@ function readRegistrationsFromSheet_() {
 function withLock_(fn) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(15000)) throw new ApiError('BUSY', 'Hệ thống đang bận, vui lòng thử lại.');
+  var result;
   try {
-    return fn();
+    result = fn();
+    return result;
   } finally {
     SpreadsheetApp.flush();
-    invalidateCache_('leads');
+    // Thao tác trên 1 khách: sửa thẳng khách đó trong cache để lần đọc sau vẫn nhanh.
+    // Còn lại (đổi nhiều khách, lỗi giữa chừng...) thì xoá cache cho chắc.
+    if (!(result && result.lead && patchLeadsCache_(result.lead))) invalidateCache_('leads');
     lock.releaseLock();
   }
 }
@@ -938,6 +962,34 @@ function cachedJson_(name, build) {
   return data;
 }
 
+// Gọi trong lock. Ghi bản đã sửa dưới phiên bản mới, nên người đang đọc Sheet song song
+// (giữ phiên bản cũ) sẽ không ghi đè bản cũ lên cache.
+function patchLeadsCache_(lead) {
+  try {
+    var cache = CacheService.getScriptCache();
+    var ver = cache.get('leads_ver');
+    var hit = ver && getChunks_(cache, 'leads_' + ver);
+    if (!hit) return false;
+    var list = JSON.parse(hit);
+    var found = false;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].segment === lead.segment && list[i].phone === lead.phone) {
+        list[i] = lead;
+        found = true;
+        break;
+      }
+    }
+    if (!found) list.push(lead); // khách mới nằm cuối Sheet
+    var newVer = Utilities.getUuid();
+    if (!putChunks_(cache, 'leads_' + newVer, JSON.stringify(list), CACHE_SECONDS.leads)) return false;
+    cache.put('leads_ver', newVer, 21600);
+    return true;
+  } catch (err) {
+    console.warn('Không cập nhật được cache leads: ' + err);
+    return false;
+  }
+}
+
 function invalidateCache_(name) {
   CacheService.getScriptCache().put(name + '_ver', Utilities.getUuid(), 21600);
 }
@@ -947,11 +999,12 @@ var CACHE_CHUNK = 30000;
 
 function putChunks_(cache, key, str, ttl) {
   var n = Math.ceil(str.length / CACHE_CHUNK) || 1;
-  if (n > 100) return; // quá lớn, bỏ qua cache
+  if (n > 100) return false; // quá lớn, bỏ qua cache
   var values = {};
   for (var i = 0; i < n; i++) values[key + '_' + i] = str.substr(i * CACHE_CHUNK, CACHE_CHUNK);
   values[key + '_n'] = String(n);
   cache.putAll(values, ttl);
+  return true;
 }
 
 function getChunks_(cache, key) {

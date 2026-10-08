@@ -66,8 +66,11 @@ lại, lịch sử. Vào bằng link mờ **"Nội bộ"** ở cuối trang đă
 - Trang tự tải lại dữ liệu mỗi 60 giây (khi không mở hộp thoại).
 - **Tốc độ**: mở trang hiện ngay dữ liệu lần trước (lưu trên trình duyệt, xoá khi Đăng xuất) rồi cập
   nhật ngầm. Apps Script cache dữ liệu 10 phút và trigger `warmCache` (5 phút/lần, do `setupAdmin`
-  tạo) nạp sẵn cache. Mọi thao tác trên trang xoá cache ngay; **sửa tay trong Sheet** thì bấm
-  **Tải lại** để thấy ngay.
+  tạo) nạp sẵn cache. Thao tác trên trang cập nhật cache ngay (sửa 1 khách thì vá thẳng khách đó
+  trong cache); **sửa tay trong Sheet** thì bấm **Tải lại** để thấy ngay.
+- **Ghi dữ liệu**: Nhận / Lưu / Chuyển / Thêm SĐT hiện kết quả ngay trên trang và gửi lên máy chủ
+  trong nền ("Đang lưu…"). Máy chủ từ chối (VD: người khác vừa nhận trước) thì trang tự quay về
+  dữ liệu đúng và báo lỗi. Đóng tab khi còn thao tác đang lưu thì trình duyệt sẽ hỏi lại.
 
 ### Cài đặt (một lần)
 
