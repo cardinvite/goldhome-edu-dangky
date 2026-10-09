@@ -1,5 +1,5 @@
 // Giống WEB_APP_URL trong script.js — cùng một Apps Script Web App.
-const API_URL = 'https://script.google.com/macros/s/AKfycbz6dZx1Di5-LRpmnewqeWIsMB3TK6pk1q9R9ucmWE0BN0rFVm-hdcJTM2ZwxNO29qdqYw/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbytJ_432pbueg2w3_lj_W7tUtcNywnfY28dFK_lZ4Yu3j8MvH7T_wycxv1UZQfU0APoVQ/exec';
 // OAuth Client ID tạo trong Google Cloud Console — xem README.md.
 const GOOGLE_CLIENT_ID = '884064042089-drsbl39b8utv2rttar95aaoea45pstt8.apps.googleusercontent.com';
 
@@ -8,7 +8,12 @@ const SESSION_KEY = 'goldhome_admin_session';
 // Không lưu dữ liệu tab Đăng ký (có CCCD).
 const SNAPSHOT_KEY = 'goldhome_admin_snapshot';
 const AUTO_REFRESH_MS = 60 * 1000;
-const MAX_ROWS = 300;
+// Tự tải lại chỉ lấy khách thay đổi; cứ FULL_SYNC_MS thì tải toàn bộ một lần
+// (để thấy cả thay đổi sửa tay trong Sheet — loại này không cập nhật updated_at).
+const FULL_SYNC_MS = 10 * 60 * 1000;
+// Lùi mốc "từ lúc nào" một chút, phòng thao tác ghi đang dở lúc máy chủ đọc.
+const SYNC_OVERLAP_MS = 2 * 60 * 1000;
+const PAGE_SIZE = 50;
 
 // Trạng thái do ADMIN quản lý (tab Statuses), nạp từ server qua applyStatuses().
 // Giá trị dưới đây chỉ là mặc định khi server chưa trả về danh sách.
@@ -36,6 +41,39 @@ function applyStatuses(list) {
   DONE_STATUSES = list.filter((st) => st.done).map((st) => st.key);
 }
 
+// Nguồn khách do ADMIN quản lý (tab Sources), nạp từ server qua applySources().
+// Khách cũ có thể lưu chữ tự do ("Nhập tay", "Form đăng ký") → hiển thị nguyên văn.
+// Mặc định khi server chưa trả về danh sách (giống DEFAULT_SOURCES trong Admin.gs).
+const DEFAULT_SOURCES = [
+  { key: 'FACEBOOK', label: 'Facebook', order: 1, active: true, is_default: true },
+  { key: 'WEB', label: 'Web', order: 2, active: true, is_default: false },
+  { key: 'YOUTUBE', label: 'Youtube', order: 3, active: true, is_default: false },
+];
+let SOURCES = Object.fromEntries(DEFAULT_SOURCES.map((src) => [src.key, src]));
+const SYSTEM_SOURCES = ['WEB'];
+
+function applySources(list) {
+  if (!Array.isArray(list) || !list.length) return;
+  state.sources = list;
+  SOURCES = Object.fromEntries(list.map((src) => [src.key, src]));
+}
+
+function sourceLabel(value) {
+  return SOURCES[value]?.label || value || '-';
+}
+
+function defaultSourceKey() {
+  return (state.sources || []).find((src) => src.is_default)?.key || '';
+}
+
+// Ô chọn nguồn: nguồn đang dùng + nguồn hiện tại của khách (kể cả đã ngừng / chữ tự do).
+function sourceOptions(current) {
+  const list = (state.sources || []).filter((src) => src.active || src.key === current);
+  const options = list.map((src) => `<option value="${esc(src.key)}" ${src.key === current ? 'selected' : ''}>${esc(src.label)}${src.active ? '' : ' (ngừng dùng)'}</option>`);
+  if (current && !SOURCES[current]) options.unshift(`<option value="${esc(current)}" selected>${esc(current)}</option>`);
+  return options.join('');
+}
+
 // Hai mảng kinh doanh — mỗi mảng là một danh sách khách riêng (cùng SĐT có thể có ở cả hai).
 const SEGMENTS = {
   DAO_TAO: { label: 'Đào tạo', short: 'ĐT' },
@@ -50,12 +88,16 @@ const state = {
   leads: [],
   filter: 'all',
   sale: '',
+  source: '',
   query: '',
   openKey: '', // "<segment>|<phone>" của khách đang mở
   segment: loadSegment(),
+  serverTime: '', // thời điểm máy chủ của lần tải gần nhất
+  lastFullSync: 0, // Date.now() của lần tải toàn bộ gần nhất
   tab: 'leads',
   regs: null, // tải khi mở tab "Đăng ký"
   reg: { range: 'all', course: '', mode: '', payment: '', query: '' },
+  sources: DEFAULT_SOURCES,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -134,6 +176,31 @@ function toLocalInput(iso) {
   const d = new Date(iso);
   if (isNaN(d)) return '';
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Ngày liên hệ (chỉ ngày). Khách cũ chưa có → dùng ngày tạo.
+function contactOf(lead) {
+  return lead.contact_date || lead.created_at || '';
+}
+
+function fmtDay(iso) {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  if (isNaN(d)) return '-';
+  const year = d.getFullYear() !== new Date().getFullYear() ? '/' + d.getFullYear() : '';
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}${year}`;
+}
+
+function toDateInput(iso) {
+  const d = iso ? new Date(iso) : new Date();
+  if (isNaN(d)) return '';
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// "2026-10-09" → 00:00 giờ máy người dùng (ISO).
+function fromDateInput(value) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || '');
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).toISOString() : '';
 }
 
 function endOfToday() {
@@ -283,6 +350,37 @@ function mergeFetched(leads) {
   return out;
 }
 
+// Ghép phần thay đổi (delta) vào danh sách hiện có.
+function mergeDelta(changed) {
+  if (!changed.length) return state.leads;
+  const index = new Map(state.leads.map((l, i) => [l.segment + '|' + l.phone, i]));
+  const out = state.leads.slice();
+  changed.forEach((l) => {
+    const key = l.segment + '|' + l.phone;
+    if (pendingLeads.has(key)) return;
+    const i = index.get(key);
+    if (i === undefined) out.unshift(l);
+    else if (timeOf(l.updated_at) >= timeOf(out[i].updated_at)) out[i] = l;
+  });
+  return out;
+}
+
+// Áp danh sách khách máy chủ trả về (toàn bộ hoặc chỉ phần thay đổi).
+function applyLeadsResponse(data) {
+  if (data.delta) state.leads = mergeDelta(data.leads);
+  else {
+    state.leads = mergeFetched(data.leads);
+    state.lastFullSync = Date.now();
+  }
+  if (data.serverTime) state.serverTime = data.serverTime;
+}
+
+// Mốc "since" cho lần tải tiếp theo, hoặc '' nếu cần tải toàn bộ.
+function syncSince() {
+  if (!state.serverTime || Date.now() - state.lastFullSync > FULL_SYNC_MS) return '';
+  return new Date(new Date(state.serverTime).getTime() - SYNC_OVERLAP_MS).toISOString();
+}
+
 function timeOf(value) {
   const t = value ? new Date(value).getTime() : 0;
   return Number.isNaN(t) ? 0 : t;
@@ -337,7 +435,10 @@ function applyInit(data) {
   state.me = data.me;
   state.users = data.users;
   applyStatuses(data.statuses);
+  applySources(data.sources);
   state.leads = mergeFetched(data.leads);
+  state.serverTime = data.serverTime || '';
+  state.lastFullSync = data.lastFullSync || Date.now();
   showApp();
 }
 
@@ -346,7 +447,10 @@ function saveSnapshot() {
   try {
     localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({
       token: state.token,
-      data: { me: state.me, users: state.users, statuses: state.statuses, leads: state.leads },
+      data: {
+        me: state.me, users: state.users, statuses: state.statuses, sources: state.sources, leads: state.leads,
+        serverTime: state.serverTime, lastFullSync: state.lastFullSync,
+      },
     }));
   } catch (err) { /* hết dung lượng / private mode: bỏ qua */ }
 }
@@ -397,13 +501,15 @@ async function resumeSession(token) {
   else setLoginStatus('Đang tải dữ liệu...');
   setSyncing(true);
   try {
-    const data = await api('init');
+    // Có bản sao còn mới → chỉ tải phần thay đổi kể từ lần trước.
+    const data = await api('init', snapshot ? { since: syncSince() } : {});
     if (!state.token) return; // đã đăng xuất trong lúc chờ
     const openDialog = document.querySelector('dialog[open]');
     state.me = data.me;
     state.users = data.users;
     applyStatuses(data.statuses);
-    state.leads = data.leads;
+    applySources(data.sources);
+    applyLeadsResponse(data);
     if (snapshot && openDialog) renderLeads(); // đang thao tác thì chỉ cập nhật bảng
     else showApp();
     afterFreshData();
@@ -420,6 +526,7 @@ function logout(message = '') {
   state.token = '';
   state.me = null;
   state.regs = null;
+  historyCache.clear();
   clearSession();
   clearSnapshot();
   window.google?.accounts?.id?.disableAutoSelect();
@@ -455,6 +562,10 @@ function getFilters() {
       .filter((key) => STATUS[key].active !== false || leads.some((l) => l.status === key))
       .map((key) => ({ key, label: STATUS[key].label, test: (l) => l.status === key })),
   ];
+}
+
+function matchSource(lead) {
+  return !state.source || String(lead.source || '') === state.source;
 }
 
 function matchSale(lead) {
@@ -514,6 +625,17 @@ function renderSaleFilter() {
   $('saleFilter').innerHTML = options
     .map(([value, label]) => `<option value="${esc(value)}">${esc(label)}</option>`).join('');
   $('saleFilter').value = state.sale;
+  renderSourceFilter();
+}
+
+// Nguồn có trong danh sách + chữ tự do của khách cũ.
+function renderSourceFilter() {
+  const keys = (state.sources || []).map((src) => src.key);
+  state.leads.forEach((l) => { if (l.source && !keys.includes(l.source)) keys.push(l.source); });
+  if (state.source && !keys.includes(state.source)) state.source = '';
+  $('sourceFilter').innerHTML = `<option value="">Tất cả nguồn</option>`
+    + keys.map((k) => `<option value="${esc(k)}">${esc(sourceLabel(k))}</option>`).join('');
+  $('sourceFilter').value = state.source;
 }
 
 function renderSearchResult() {
@@ -549,6 +671,8 @@ function leadSummary(lead) {
       <dt>SĐT</dt><dd><strong>${esc(lead.phone)}</strong>${lead.customer_name ? ' · ' + esc(lead.customer_name) : ''}</dd>
       <dt>Trạng thái</dt><dd>${badge(lead.status)}</dd>
       <dt>Sales phụ trách</dt><dd>${lead.assigned_email ? esc(userName(lead.assigned_email)) : 'Chưa ai nhận'}</dd>
+      <dt>Nguồn</dt><dd>${esc(sourceLabel(lead.source))}</dd>
+      <dt>Ngày liên hệ</dt><dd>${fmtDay(contactOf(lead))}</dd>
       <dt>Lần chăm sóc gần nhất</dt><dd>${fmtFull(lead.last_contacted_at)}</dd>
       <dt>Hẹn gọi lại</dt><dd>${fmtFull(lead.next_followup_at)}</dd>
       <dt>Ghi chú</dt><dd class="pre">${esc(lead.note) || '-'}</dd>
@@ -562,11 +686,60 @@ function visibleLeads() {
   }
   const filters = getFilters();
   const filter = filters.find((f) => f.key === state.filter) || filters[0];
-  const list = segLeads().filter((l) => matchSale(l) && filter.test(l));
+  const list = segLeads().filter((l) => matchSale(l) && matchSource(l) && filter.test(l));
   if (state.filter === 'today' || state.filter === 'CALLBACK') {
     return list.sort((a, b) => String(a.next_followup_at).localeCompare(String(b.next_followup_at)));
   }
   return list.sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
+}
+
+// ---------- Phân trang ----------
+
+// Đổi bộ lọc / tìm kiếm (key khác lần trước) → về trang 1; tự tải lại thì giữ trang đang xem.
+const pagers = {};
+
+function paginate(name, list, key) {
+  const p = pagers[name] || (pagers[name] = { page: 1, key });
+  if (p.key !== key) {
+    p.key = key;
+    p.page = 1;
+  }
+  const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  p.page = Math.min(Math.max(1, p.page), pages);
+  const start = (p.page - 1) * PAGE_SIZE;
+  return { rows: list.slice(start, start + PAGE_SIZE), page: p.page, pages, start, total: list.length };
+}
+
+function renderPager(id, name, info) {
+  const { page, pages, start, rows, total } = info;
+  if (pages <= 1) {
+    $(id).innerHTML = '';
+    return;
+  }
+  // Trang 1, trang cuối và 2 trang quanh trang hiện tại; chỗ bị bỏ qua hiện "…".
+  const nums = [];
+  for (let i = 1; i <= pages; i++) {
+    if (i === 1 || i === pages || Math.abs(i - page) <= 2) nums.push(i);
+    else if (nums[nums.length - 1] !== '…') nums.push('…');
+  }
+  const btn = (p, label, extra = '') =>
+    `<button type="button" class="btn ghost ${extra}" data-pager="${name}" data-page="${p}">${label}</button>`;
+  $(id).innerHTML = `
+    <span class="pager-info">${start + 1}–${start + rows.length} / ${total}</span>
+    <div class="pager-btns">
+      ${page > 1 ? btn(page - 1, '‹ Trước') : ''}
+      ${nums.map((n) => (n === '…' ? '<span class="pager-gap">…</span>' : btn(n, n, n === page ? 'active' : ''))).join('')}
+      ${page < pages ? btn(page + 1, 'Sau ›') : ''}
+    </div>`;
+}
+
+function goToPage(name, page) {
+  if (!pagers[name]) return;
+  pagers[name].page = page;
+  if (name === 'leads') renderLeads();
+  else renderRegs();
+  const table = name === 'leads' ? $('leadRows') : $('regRows');
+  table.closest('.table-wrap').scrollIntoView({ block: 'start', behavior: 'smooth' });
 }
 
 function renderLeads() {
@@ -576,11 +749,14 @@ function renderLeads() {
   renderSearchResult();
 
   const list = visibleLeads();
-  const shown = list.slice(0, MAX_ROWS);
+  const paged = paginate('leads', list,
+    [state.segment, state.filter, state.sale, state.source, state.query.trim()].join('|'));
+  const shown = paged.rows;
   $('leadRows').innerHTML = shown.map((lead) => `
     <tr data-open="${esc(lead.phone)}" data-seg="${esc(lead.segment)}" class="${lead.assigned_email === state.me.email ? 'mine' : ''}">
       <td data-label="SĐT" class="phone">${esc(lead.phone)}</td>
       <td data-label="Khách hàng">${esc(lead.customer_name) || '-'}</td>
+      <td data-label="Nguồn" class="nowrap">${esc(sourceLabel(lead.source))}<br><span class="muted">${fmtDay(contactOf(lead))}</span></td>
       <td data-label="Sales">${esc(saleLabel(lead))}</td>
       <td data-label="Trạng thái">${badge(lead.status)}</td>
       <td data-label="Chăm sóc cuối">${fmtShort(lead.last_contacted_at)}</td>
@@ -590,9 +766,9 @@ function renderLeads() {
 
   let info = '';
   if (!list.length) info = state.query.trim() ? 'Không tìm thấy khách phù hợp.' : `Mảng ${segLabel(state.segment)} chưa có khách nào phù hợp.`;
-  else if (list.length > shown.length) info = `Hiển thị ${shown.length}/${list.length} khách — dùng tìm kiếm hoặc bộ lọc để thu hẹp.`;
   else if (state.query.trim()) info = `Tìm thấy ${list.length} khách (trong toàn bộ mảng ${segLabel(state.segment)}).`;
   $('listInfo').textContent = info;
+  renderPager('leadPager', 'leads', paged);
   // Tab khác cũng hiện sale phụ trách → vẽ lại nếu đang mở.
   if (state.tab === 'sales') renderSalesTab();
   if (state.tab === 'registrations' && state.regs) renderRegs();
@@ -602,11 +778,13 @@ function renderLeads() {
 async function refresh(silent = false, fresh = false) {
   setSyncing(true);
   try {
-    const data = await api('list', { fresh });
+    const data = await api('list', fresh ? { fresh } : { since: syncSince() });
     applyStatuses(data.statuses);
-    state.leads = mergeFetched(data.leads);
+    applySources(data.sources);
+    applyLeadsResponse(data);
     renderLeads();
-    saveSnapshot();
+    if (state.tab === 'sources') renderSourcesTab();
+    if (!data.delta || data.leads.length) saveSnapshot();
     if (!silent) toast('Đã tải lại dữ liệu.');
   } catch (err) {
     if (!silent) toast(err.message, 'error');
@@ -671,6 +849,16 @@ function renderLeadDialog(lead) {
         <span>Tên khách hàng</span>
         <input name="customerName" type="text" value="${esc(lead.customer_name)}" autocomplete="off">
       </label>
+      <div class="field-row">
+        <label class="field">
+          <span>Nguồn</span>
+          <select name="source">${sourceOptions(lead.source)}</select>
+        </label>
+        <label class="field">
+          <span>Ngày liên hệ</span>
+          <input name="contactDate" type="date" value="${toDateInput(contactOf(lead))}" required>
+        </label>
+      </div>
       ${adminAssign}
       <label class="field">
         <span>Trạng thái</span>
@@ -698,7 +886,7 @@ function renderLeadDialog(lead) {
       <div class="dialog-head">
         <div>
           <h2 class="phone-title">${esc(lead.phone)}</h2>
-          <div class="sub">${segTag(lead.segment)} ${badge(lead.status)} · Nguồn: ${esc(lead.source) || '-'} · Tạo: ${fmtFull(lead.created_at)}</div>
+          <div class="sub">${segTag(lead.segment)} ${badge(lead.status)} · Nguồn: ${esc(sourceLabel(lead.source))} · Liên hệ: ${fmtDay(contactOf(lead))} · Tạo: ${fmtFull(lead.created_at)}</div>
         </div>
         <button type="button" class="icon-btn" data-close aria-label="Đóng">×</button>
       </div>
@@ -759,14 +947,23 @@ function renderTimeline(activities, withPhone) {
     </div>`).join('');
 }
 
+// Lịch sử đã xem trong phiên: mở lại khách thì hiện ngay, rồi cập nhật bản mới trong nền.
+const historyCache = new Map();
+
 async function loadHistory(segment, phone) {
+  const key = segment + '|' + phone;
+  const show = (activities) => {
+    if (state.openKey === key && $('historyList')) $('historyList').innerHTML = renderTimeline(activities, false);
+  };
+  if (historyCache.has(key)) show(historyCache.get(key));
   try {
     const data = await api('history', { segment, phone });
-    if (state.openKey === segment + '|' + phone && $('historyList')) {
-      $('historyList').innerHTML = renderTimeline(data.activities, false);
-    }
+    historyCache.set(key, data.activities);
+    show(data.activities);
   } catch (err) {
-    if ($('historyList')) $('historyList').innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
+    if (!historyCache.has(key) && $('historyList')) {
+      $('historyList').innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
+    }
   }
 }
 
@@ -787,7 +984,9 @@ function isOpenLead(lead) {
 
 // Hiện kết quả ngay trên giao diện (predict), gửi lên máy chủ trong nền; máy chủ trả lỗi
 // (VD: người khác vừa nhận) thì quay về dữ liệu máy chủ / dữ liệu cũ.
-async function runLeadAction(action, params, successMessage, predict) {
+// options.closeDialog: đóng hộp thoại ngay khi bấm (lưu tiếp trong nền);
+// options.onError(err): gọi sau khi đã quay về dữ liệu đúng.
+async function runLeadAction(action, params, successMessage, predict, options = {}) {
   const key = params.segment + '|' + params.phone;
   if (pendingLeads.has(key)) {
     toast('Đang lưu thao tác trước của khách này, đợi giây lát…');
@@ -799,7 +998,8 @@ async function runLeadAction(action, params, successMessage, predict) {
   pendingLeads.set(key, guess);
   upsertLead(guess);
   renderLeads();
-  if (isOpenLead(guess)) {
+  if (options.closeDialog && isOpenLead(guess)) $('leadDialog').close();
+  else if (isOpenLead(guess)) {
     const history = $('historyList')?.innerHTML;
     renderLeadDialog(guess);
     if (history) $('historyList').innerHTML = history;
@@ -822,6 +1022,7 @@ async function runLeadAction(action, params, successMessage, predict) {
       if (isOpenLead(before)) openLead(before.segment, before.phone);
     }
     handleLeadError(err);
+    options.onError?.(err);
   } finally {
     setSyncing(false);
   }
@@ -844,17 +1045,42 @@ function updateLead(form) {
     followupAt: form.followupAt.value ? new Date(form.followupAt.value).toISOString() : '',
   };
   if (form.assignedEmail) values.assignedEmail = form.assignedEmail.value; // chỉ ADMIN có ô này
-  runLeadAction('update', { segment: form.dataset.seg, phone: form.dataset.phone, ...values }, 'Đã lưu.', (l) => {
+  if (form.source.value) values.source = form.source.value;
+  const contactDate = fromDateInput(form.contactDate.value);
+  if (!contactDate) return toast('Vui lòng chọn ngày liên hệ.', 'error');
+  values.contactDate = contactDate;
+  const segment = form.dataset.seg;
+  const phone = form.dataset.phone;
+  runLeadAction('update', { segment, phone, ...values }, 'Đã lưu.', (l) => {
     if (values.status !== l.status || values.note !== (l.note || '')) l.last_contacted_at = l.updated_at;
     l.customer_name = values.customerName;
     l.status = values.status;
     l.note = values.note;
     l.next_followup_at = values.followupAt;
+    if (values.source) l.source = values.source;
+    l.contact_date = values.contactDate;
     if (values.assignedEmail !== undefined) {
       l.assigned_email = values.assignedEmail;
       l.assigned_name = values.assignedEmail ? userName(values.assignedEmail) : '';
     }
     return l;
+  }, {
+    closeDialog: true,
+    // Lưu lỗi: mở lại khách (nếu đang không mở hộp thoại nào). Lỗi không phải do dữ liệu đã đổi
+    // (mất mạng, máy chủ bận...) thì điền lại nội dung vừa nhập để khỏi gõ lại.
+    onError: (err) => {
+      if (document.querySelector('dialog[open]')) return;
+      openLead(segment, phone);
+      const again = $('updateForm');
+      if (err.data?.lead || !again) return;
+      again.customerName.value = values.customerName;
+      again.status.value = values.status;
+      again.note.value = values.note;
+      again.followupAt.value = toLocalInput(values.followupAt);
+      if (values.source) again.source.value = values.source;
+      again.contactDate.value = toDateInput(values.contactDate);
+      if (again.assignedEmail && values.assignedEmail !== undefined) again.assignedEmail.value = values.assignedEmail;
+    },
   });
 }
 
@@ -877,6 +1103,8 @@ function openAddDialog(phone = '', customerName = '', segment = state.segment) {
   $('addTitle').textContent = 'Thêm SĐT — ' + segLabel(segment);
   form.phone.value = phone;
   form.customerName.value = customerName;
+  form.contactDate.value = toDateInput();
+  form.source.innerHTML = sourceOptions(defaultSourceKey());
   checkAddPhone();
   $('addDialog').showModal();
   form.phone.focus();
@@ -927,6 +1155,8 @@ async function submitAdd(event) {
     customerName: form.customerName.value.trim(),
     note: form.note.value.trim(),
     claim: form.claim.checked,
+    source: form.source.value,
+    contactDate: fromDateInput(form.contactDate.value),
   };
   const now = new Date().toISOString();
   const guess = {
@@ -941,7 +1171,8 @@ async function submitAdd(event) {
     next_followup_at: '',
     created_at: now,
     updated_at: now,
-    source: 'Nhập tay',
+    source: params.source || defaultSourceKey(),
+    contact_date: params.contactDate || now,
     created_by: state.me.email,
   };
   pendingLeads.set(key, guess);
@@ -976,6 +1207,8 @@ async function submitAdd(event) {
         openAddDialog(phone, params.customerName, segment);
         form.note.value = params.note;
         form.claim.checked = params.claim;
+        form.source.value = params.source;
+        if (params.contactDate) form.contactDate.value = toDateInput(params.contactDate);
       }
     }
   } finally {
@@ -1066,7 +1299,9 @@ function renderRegs() {
       ${esc(range.label)} <span class="count">${base.filter(regRangeTest(range.key)).length}</span></button>`).join('');
 
   const list = filteredRegs();
-  const shown = list.slice(0, MAX_ROWS);
+  const { range, course, mode, payment, query } = state.reg;
+  const paged = paginate('regs', list, [range, course, mode, payment, query.trim()].join('|'));
+  const shown = paged.rows;
   $('regRows').innerHTML = shown.map((r) => `
     <tr data-reg="${r.row}">
       <td data-label="Thời gian" class="nowrap">${fmtShort(r.created_at)}</td>
@@ -1079,9 +1314,8 @@ function renderRegs() {
       <td data-label="Chăm sóc">${leadBadgeFor(r.phone)}</td>
     </tr>`).join('');
 
-  let info = `${list.length} lượt đăng ký`;
-  if (list.length > shown.length) info += ` — hiển thị ${shown.length} mới nhất, dùng tìm kiếm/bộ lọc để thu hẹp`;
-  $('regInfo').textContent = list.length ? info + '.' : 'Không có lượt đăng ký nào phù hợp.';
+  $('regInfo').textContent = list.length ? `${list.length} lượt đăng ký.` : 'Không có lượt đăng ký nào phù hợp.';
+  renderPager('regPager', 'regs', paged);
 }
 
 async function loadRegistrations(silent = false, fresh = false) {
@@ -1512,9 +1746,186 @@ async function moveStatus(index, dir) {
   }
 }
 
+// ---------- Quản lý nguồn (ADMIN) ----------
+
+function renderSourcesTab() {
+  const list = state.sources || [];
+  $('sourceRows').innerHTML = list.map((src, i) => {
+    const count = (seg) => state.leads.filter((l) => l.segment === seg && l.source === src.key).length;
+    const system = SYSTEM_SOURCES.includes(src.key);
+    return `<tr class="${src.active ? '' : 'inactive'}">
+      <td><div class="order-btns">
+        <button type="button" class="btn ghost" data-source-move="${i}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="Lên">▲</button>
+        <button type="button" class="btn ghost" data-source-move="${i}" data-dir="1" ${i === list.length - 1 ? 'disabled' : ''} aria-label="Xuống">▼</button>
+      </div></td>
+      <td><strong>${esc(src.label)}</strong></td>
+      <td><span class="status-key">${esc(src.key)}</span>${system ? ' 🔒' : ''}</td>
+      <td>${src.is_default ? '<span class="badge green">Mặc định</span>' : ''}</td>
+      <td>${count('DAO_TAO')} / ${count('XAY_DUNG')}</td>
+      <td>${src.active ? 'Đang dùng' : '<span class="muted">Ngừng dùng</span>'}</td>
+      <td><div class="row-actions">
+        <button type="button" class="btn ghost" data-source-edit="${esc(src.key)}">Sửa</button>
+        ${system ? '' : `<button type="button" class="btn ghost danger-text" data-source-del="${esc(src.key)}">Xoá</button>`}
+      </div></td>
+    </tr>`;
+  }).join('');
+  // Khách cũ ghi nguồn bằng chữ tự do (trước khi có danh sách nguồn).
+  const legacy = {};
+  state.leads.forEach((l) => { if (l.source && !SOURCES[l.source]) legacy[l.source] = (legacy[l.source] || 0) + 1; });
+  const names = Object.keys(legacy);
+  $('sourceLegacy').innerHTML = names.length
+    ? 'Khách cũ có nguồn ngoài danh sách: ' + names.map((n) => `<strong>${esc(n)}</strong> (${legacy[n]})`).join(', ')
+      + '. Sửa từng khách để chọn nguồn mới.'
+    : '';
+}
+
+function afterSourcesChanged(sources) {
+  applySources(sources);
+  renderSourcesTab();
+  renderSaleFilter();
+  renderLeads();
+}
+
+function openSourceDialog(key = '') {
+  const src = SOURCES[key] || null;
+  const system = !!src && SYSTEM_SOURCES.includes(src.key);
+  $('sourceDialogBody').innerHTML = `
+    <form id="sourceForm" class="dialog-inner" data-key="${esc(src?.key || '')}" novalidate>
+      <div class="dialog-head">
+        <h2>${src ? 'Sửa nguồn' : 'Thêm nguồn'}</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Đóng">×</button>
+      </div>
+      <label class="field">
+        <span>Tên hiển thị <span class="req">*</span></span>
+        <input name="label" type="text" maxlength="40" autocomplete="off" value="${esc(src?.label || '')}"
+               placeholder="VD: Tiktok" required>
+      </label>
+      ${src ? `<p class="hint">Mã: <span class="status-key">${esc(src.key)}</span> (không đổi được)</p>` : `
+      <label class="field">
+        <span>Mã (tự tạo từ tên, có thể sửa)</span>
+        <input name="key" type="text" maxlength="30" autocomplete="off" class="status-key" placeholder="TIKTOK">
+      </label>`}
+      <label class="check">
+        <input name="isDefault" type="checkbox" ${src?.is_default ? 'checked disabled' : ''}>
+        <span>Nguồn mặc định khi thêm khách${src?.is_default ? ' (chọn nguồn khác làm mặc định để đổi)' : ''}</span>
+      </label>
+      <label class="check">
+        <input name="active" type="checkbox" ${!src || src.active !== false ? 'checked' : ''} ${system || src?.is_default ? 'disabled' : ''}>
+        <span>Đang dùng (bỏ tick = ẩn khỏi ô chọn, khách cũ giữ nguyên)</span>
+      </label>
+      ${system ? '<p class="hint">Nguồn hệ thống: khách tự điền form đăng ký trên web được gắn nguồn này.</p>' : ''}
+      <div class="dialog-actions">
+        <button type="button" class="btn ghost" data-close>Huỷ</button>
+        <button type="submit" class="btn primary">${src ? 'Lưu' : 'Thêm'}</button>
+      </div>
+    </form>`;
+  $('sourceDialog').showModal();
+  const form = $('sourceForm');
+  form.label.focus();
+  if (!src) {
+    let touched = false;
+    form.key.addEventListener('input', () => { touched = true; });
+    form.label.addEventListener('input', () => { if (!touched) form.key.value = statusKeyFrom(form.label.value); });
+  }
+}
+
+async function submitSourceForm(form) {
+  if (!form.label.value.trim()) return toast('Vui lòng nhập tên nguồn.', 'error');
+  const isNew = !form.dataset.key;
+  if (form.isDefault.checked && !form.active.checked) return toast('Nguồn mặc định phải đang được dùng.', 'error');
+  const button = form.querySelector('[type=submit]');
+  button.disabled = true;
+  try {
+    const data = await api('saveSource', {
+      isNew,
+      key: isNew ? form.key.value : form.dataset.key,
+      label: form.label.value,
+      active: form.active.checked,
+      isDefault: form.isDefault.checked,
+    });
+    $('sourceDialog').close();
+    afterSourcesChanged(data.sources);
+    toast(isNew ? 'Đã thêm nguồn.' : 'Đã lưu nguồn.', 'success');
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function openDeleteSource(key) {
+  const src = SOURCES[key];
+  if (!src) return;
+  if (src.is_default) return toast('Đây là nguồn mặc định — chọn nguồn mặc định khác trước khi xoá.', 'error');
+  const used = state.leads.filter((l) => l.source === key);
+  const targets = (state.sources || []).filter((x) => x.key !== key && x.active !== false);
+  $('sourceDialogBody').innerHTML = `
+    <form id="deleteSourceForm" class="dialog-inner" data-key="${esc(key)}">
+      <div class="dialog-head">
+        <h2>Xoá nguồn</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Đóng">×</button>
+      </div>
+      <p>Xoá nguồn <strong>${esc(src.label)}</strong>?</p>
+      ${used.length ? `
+        <div class="warn-box">Có <strong>${used.length}</strong> khách thuộc nguồn này
+          (Đào tạo: ${used.filter((l) => l.segment === 'DAO_TAO').length},
+          Xây dựng: ${used.filter((l) => l.segment === 'XAY_DUNG').length}).</div>
+        <label class="field">
+          <span>Chuyển các khách này sang nguồn</span>
+          <select name="migrateTo" required>
+            ${targets.map((x) => `<option value="${esc(x.key)}">${esc(x.label)}</option>`).join('')}
+          </select>
+        </label>` : '<p class="muted">Không có khách nào thuộc nguồn này.</p>'}
+      <p class="hint">Chỉ muốn ẩn đi? Dùng <button type="button" class="link" data-source-edit="${esc(key)}">Sửa → bỏ tick "Đang dùng"</button>.</p>
+      <div class="dialog-actions">
+        <button type="button" class="btn ghost" data-close>Huỷ</button>
+        <button type="submit" class="btn danger">Xoá nguồn</button>
+      </div>
+    </form>`;
+  $('sourceDialog').showModal();
+}
+
+async function submitDeleteSource(form) {
+  const button = form.querySelector('[type=submit]');
+  button.disabled = true;
+  try {
+    const data = await api('deleteSource', {
+      key: form.dataset.key,
+      migrateTo: form.migrateTo ? form.migrateTo.value : '',
+    });
+    $('sourceDialog').close();
+    applySources(data.sources);
+    await refresh(true);
+    renderSourcesTab();
+    toast('Đã xoá nguồn' + (data.moved ? `, chuyển ${data.moved} khách.` : '.'), 'success');
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function moveSource(index, dir) {
+  const keys = (state.sources || []).map((src) => src.key);
+  const j = index + dir;
+  if (j < 0 || j >= keys.length) return;
+  [keys[index], keys[j]] = [keys[j], keys[index]];
+  const previous = state.sources;
+  applySources(keys.map((k) => state.sources.find((src) => src.key === k)));
+  renderSourcesTab();
+  try {
+    const data = await api('reorderSources', { keys });
+    afterSourcesChanged(data.sources);
+  } catch (err) {
+    applySources(previous);
+    renderSourcesTab();
+    toast(err.message, 'error');
+  }
+}
+
 function switchTab(tab) {
   document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
-  ['leads', 'registrations', 'activity', 'sales', 'statuses'].forEach((t) => { $('tab-' + t).hidden = t !== tab; });
+  ['leads', 'registrations', 'activity', 'sales', 'statuses', 'sources'].forEach((t) => { $('tab-' + t).hidden = t !== tab; });
   state.tab = tab;
   if (tab === 'registrations') {
     if (state.regs) renderRegs();
@@ -1523,16 +1934,24 @@ function switchTab(tab) {
   if (tab === 'activity') loadActivityTab();
   if (tab === 'sales') renderSalesTab();
   if (tab === 'statuses') renderStatusesTab();
+  if (tab === 'sources') renderSourcesTab();
 }
 
 // ---------- Sự kiện ----------
 
 document.addEventListener('click', (event) => {
-  const el = event.target.closest('[data-filter],[data-open],[data-add-phone],[data-close],[data-claim],[data-copy],[data-quick],[data-tab],[data-reg],[data-reg-range],[data-segment],[data-user-new],[data-user-edit],[data-user-del],[data-status-new],[data-status-edit],[data-status-del],[data-status-move]');
+  const el = event.target.closest('[data-filter],[data-open],[data-add-phone],[data-close],[data-claim],[data-copy],[data-quick],[data-tab],[data-reg],[data-reg-range],[data-segment],[data-user-new],[data-user-edit],[data-user-del],[data-status-new],[data-status-edit],[data-status-del],[data-status-move],[data-source-new],[data-source-edit],[data-source-del],[data-source-move],[data-pager]');
   if (!el) return;
   const d = el.dataset;
 
-  if (d.tab) switchTab(d.tab);
+  if (d.pager) goToPage(d.pager, Number(d.page));
+  else if (d.tab) switchTab(d.tab);
+  else if ('sourceNew' in d) openSourceDialog();
+  else if (d.sourceEdit) {
+    if ($('sourceDialog').open) $('sourceDialog').close();
+    openSourceDialog(d.sourceEdit);
+  } else if (d.sourceDel) openDeleteSource(d.sourceDel);
+  else if (d.sourceMove) moveSource(Number(d.sourceMove), Number(d.dir));
   else if ('statusNew' in d) openStatusDialog();
   else if (d.statusEdit) {
     if ($('statusDialog').open) $('statusDialog').close();
@@ -1580,6 +1999,8 @@ document.addEventListener('submit', (event) => {
     deleteUserForm: submitDeleteUser,
     statusForm: submitStatusForm,
     deleteStatusForm: submitDeleteStatus,
+    sourceForm: submitSourceForm,
+    deleteSourceForm: submitDeleteSource,
   };
   if (handlers[event.target.id]) {
     event.preventDefault();
@@ -1606,6 +2027,11 @@ $('searchInput').addEventListener('keydown', (event) => {
 
 $('saleFilter').addEventListener('change', (event) => {
   state.sale = event.target.value;
+  renderLeads();
+});
+
+$('sourceFilter').addEventListener('change', (event) => {
+  state.source = event.target.value;
   renderLeads();
 });
 

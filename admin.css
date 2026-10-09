@@ -151,7 +151,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   cursor: pointer;
 }
 
-input[type=text], input[type=tel], input[type=search], input[type=datetime-local], select, textarea {
+input[type=text], input[type=tel], input[type=search], input[type=datetime-local], input[type=date], select, textarea {
   width: 100%;
   padding: 9px 12px;
   border: 1px solid var(--border);
@@ -159,7 +159,7 @@ input[type=text], input[type=tel], input[type=search], input[type=datetime-local
   background: #fff;
 }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-textarea { resize: vertical; }
+textarea { resize: vertical; min-height: 100px; }
 
 .field { display: block; margin-bottom: 12px; }
 .field > span { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; }
@@ -196,6 +196,8 @@ textarea { resize: vertical; }
 .summary dt { color: var(--muted); }
 .summary dd { margin: 0; }
 .pre { white-space: pre-wrap; }
+/* Link / chuỗi dài không có dấu cách (VD: link Messenger) phải xuống dòng, không kéo giãn hộp thoại. */
+.pre, .tl-body, .summary dd { overflow-wrap: anywhere; word-break: break-word; }
 
 .stats {
   display: grid;
@@ -333,7 +335,7 @@ td.overdue { color: var(--red); font-weight: 600; }
 /* ---------- Timeline ---------- */
 
 .timeline { display: flex; flex-direction: column; }
-.tl-item { padding: 8px 0 8px 14px; border-left: 2px solid var(--border); position: relative; }
+.tl-item { padding: 8px 0 8px 14px; border-left: 2px solid var(--border); position: relative; min-width: 0; }
 .tl-item::before {
   content: "";
   position: absolute;
@@ -494,3 +496,16 @@ input[readonly] { background: var(--gray-bg); color: var(--muted); }
 .sync-status { font-size: 0.8rem; color: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: 0.4; } }
 @media (prefers-reduced-motion: reduce) { .sync-status { animation: none; } }
+
+/* Hai ô trên một hàng (Nguồn + Ngày liên hệ); màn hẹp thì xếp dọc. */
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 480px) { .field-row { grid-template-columns: 1fr; gap: 0; } }
+
+/* Phân trang dưới bảng */
+.pager { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.pager:empty { display: none; }
+.pager-info { color: var(--muted); font-size: 0.85rem; }
+.pager-btns { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.pager-btns .btn { min-width: 36px; padding: 6px 10px; }
+.pager-btns .btn.active { background: var(--primary); border-color: var(--primary); color: var(--ink); font-weight: 700; }
+.pager-gap { padding: 0 4px; color: var(--muted); }

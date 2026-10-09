@@ -58,6 +58,12 @@ lại, lịch sử. Vào bằng link mờ **"Nội bộ"** ở cuối trang đă
 - **Trạng thái chăm sóc** do ADMIN quản lý ở tab **Trạng thái** (lưu trong tab `Statuses` của Sheet).
   3 trạng thái hệ thống `NEW`, `CALLING`, `CLOSED` chỉ đổi được tên/màu. Xoá trạng thái đang có khách
   thì chọn trạng thái thay thế (có ghi lịch sử).
+- **Nguồn khách** (Facebook, Web, Youtube…) do ADMIN quản lý ở tab **Nguồn** (tab `Sources` của
+  Sheet): thêm / sửa / ẩn / xoá / sắp xếp và chọn nguồn **mặc định** (ban đầu là Facebook) được chọn
+  sẵn khi thêm khách. Nguồn `WEB` gắn cho khách tự điền form đăng ký nên không xoá được. Khách cũ
+  ghi nguồn bằng chữ ("Nhập tay", "Form đăng ký") vẫn hiện nguyên văn.
+- **Ngày liên hệ** (cột `contact_date`): chọn khi thêm khách, mặc định là ngày tạo; sửa được trong
+  form của khách. Khách cũ chưa có thì hiển thị ngày tạo.
 - Dữ liệu nằm trong cùng Google Sheet, 3 tab tự tạo: **Leads** (mỗi SĐT một dòng, không trùng),
   **Activities** (lịch sử, chỉ ghi thêm), **Users** (danh sách được phép đăng nhập).
 - Khách điền form đăng ký có SĐT → tự thêm vào **Leads** với trạng thái "Chưa chăm sóc".
@@ -68,6 +74,11 @@ lại, lịch sử. Vào bằng link mờ **"Nội bộ"** ở cuối trang đă
   nhật ngầm. Apps Script cache dữ liệu 10 phút và trigger `warmCache` (5 phút/lần, do `setupAdmin`
   tạo) nạp sẵn cache. Thao tác trên trang cập nhật cache ngay (sửa 1 khách thì vá thẳng khách đó
   trong cache); **sửa tay trong Sheet** thì bấm **Tải lại** để thấy ngay.
+- **Tải theo phần thay đổi**: tự tải lại (60 giây/lần) và mở lại trang chỉ lấy khách có `updated_at`
+  mới; cứ 10 phút (hoặc bấm **Tải lại**) mới tải toàn bộ danh sách. Mỗi request Apps Script đọc cache
+  gộp 1 lần (3 lượt gọi CacheService thay vì ~9).
+- **Lịch sử chăm sóc**: không đọc cả tab Activities — chỉ đọc cột SĐT để tìm dòng của khách, có cache
+  riêng từng khách (xoá khi khách có hoạt động mới). Tab Hoạt động chỉ đọc 300 dòng cuối.
 - **Ghi dữ liệu**: Nhận / Lưu / Chuyển / Thêm SĐT hiện kết quả ngay trên trang và gửi lên máy chủ
   trong nền ("Đang lưu…"). Máy chủ từ chối (VD: người khác vừa nhận trước) thì trang tự quay về
   dữ liệu đúng và báo lỗi. Đóng tab khi còn thao tác đang lưu thì trình duyệt sẽ hỏi lại.
@@ -99,7 +110,8 @@ lại, lịch sử. Vào bằng link mờ **"Nội bộ"** ở cuối trang đă
 2. Bấm **+ → Script**, đặt tên `Admin`, dán toàn bộ `apps-script/Admin.gs`.
 3. Chọn hàm `setupAdmin` trên thanh công cụ → **Run** → cấp quyền lại (lần này có thêm quyền
    "kết nối dịch vụ bên ngoài" — dùng để xác minh đăng nhập Google). Hàm này tạo 3 tab và thêm
-   chủ Sheet làm ADMIN.
+   chủ Sheet làm ADMIN. Chạy lại sau mỗi lần cập nhật cũng an toàn (tạo thêm tab mới như
+   `Statuses`, `Sources` nếu chưa có, không đụng dữ liệu cũ).
 4. **Deploy → Manage deployments → bút chì → Version: New version → Deploy** (giữ nguyên URL).
 
 **4. Thêm người dùng** — sau khi đăng nhập bằng tài khoản ADMIN, vào tab **Sales** trên trang
@@ -124,6 +136,7 @@ khách). Hoặc sửa trực tiếp tab **Users** trong Sheet, mỗi người m�
 | Chuyển khách giữa Sales | | ✓ |
 | Thêm / sửa / khoá / xoá tài khoản (tab Sales) | | ✓ |
 | Thêm / sửa / ẩn / xoá / sắp xếp trạng thái chăm sóc (tab Trạng thái) | | ✓ |
+| Thêm / sửa / ẩn / xoá / sắp xếp nguồn khách, chọn nguồn mặc định (tab Nguồn) | | ✓ |
 | Tab Đăng ký (dữ liệu form, tab `DangKy`) | ✓ (CCCD, địa chỉ bị che) | ✓ đầy đủ + Xuất CSV |
 | Tab Hoạt động (lịch sử toàn hệ thống), tab Sales | | ✓ |
 

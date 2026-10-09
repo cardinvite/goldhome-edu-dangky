@@ -1,7 +1,7 @@
 // Backend cho trang quản lý khách hàng (admin.html).
 // Thêm file này vào cùng project Apps Script với Code.gs (bấm "+" > Script > đặt tên Admin).
 // Cấu hình: Project Settings > Script Properties > thêm GOOGLE_CLIENT_ID = OAuth Client ID.
-// Chạy hàm setupAdmin() một lần để tạo các tab Leads / Activities / Users.
+// Chạy hàm setupAdmin() một lần để tạo các tab Leads / Activities / Users / Statuses / Sources.
 // Xem README.md để biết đầy đủ các bước.
 
 var LEADS_SHEET = 'Leads';
@@ -10,7 +10,8 @@ var USERS_SHEET = 'Users';
 
 // Cột mới luôn thêm vào CUỐI để dữ liệu cũ trong Sheet vẫn đọc đúng.
 var LEAD_COLS = ['phone', 'customer_name', 'assigned_email', 'status', 'note',
-  'last_contacted_at', 'next_followup_at', 'created_at', 'updated_at', 'source', 'created_by', 'segment'];
+  'last_contacted_at', 'next_followup_at', 'created_at', 'updated_at', 'source', 'created_by', 'segment',
+  'contact_date'];
 var ACTIVITY_COLS = ['created_at', 'phone', 'user_email', 'user_name', 'action',
   'old_status', 'new_status', 'note', 'followup_at', 'assigned_email', 'segment'];
 var USER_COLS = ['email', 'name', 'role', 'active'];
@@ -19,7 +20,7 @@ var REG_SHEET = 'DangKy';
 var REG_COLS = ['created_at', 'name', 'birthday', 'cccd', 'address', 'phone', 'zalo',
   'courses', 'study_mode', 'commitment', 'payment'];
 
-var DATE_FIELDS = ['last_contacted_at', 'next_followup_at', 'created_at', 'updated_at', 'followup_at'];
+var DATE_FIELDS = ['last_contacted_at', 'next_followup_at', 'created_at', 'updated_at', 'followup_at', 'contact_date'];
 
 // Số ngày giữ đăng nhập. Muốn đăng xuất tất cả mọi người: xoá Script Property SESSION_SECRET.
 var SESSION_DAYS = 1;
@@ -51,10 +52,20 @@ var DEFAULT_STATUSES = [
   ['INVALID', 'Số sai / Không hợp lệ', 'dark', true]
 ];
 
+// Nguồn khách do ADMIN quản lý (tab Sources). Cột "source" của Leads lưu key; dòng cũ có thể là
+// chữ tự do ("Nhập tay", "Form đăng ký") — vẫn hiển thị nguyên văn.
+// is_default = nguồn chọn sẵn khi thêm khách (luôn có đúng 1).
+var SOURCES_SHEET = 'Sources';
+var SOURCE_COLS = ['key', 'label', 'order', 'active', 'is_default'];
+var DEFAULT_SOURCES = [['FACEBOOK', 'Facebook', true], ['WEB', 'Web', false], ['YOUTUBE', 'Youtube', false]];
+// WEB = khách tự điền form đăng ký trên web → không xoá / khoá được.
+var SYSTEM_SOURCES = { WEB: true };
+var FORM_SOURCE = 'WEB';
+
 // Cache đọc (CacheService) — mọi thao tác ghi qua withLock_ đều cập nhật/xoá cache "leads",
 // nên chỉ trường hợp sửa tay trực tiếp trong Sheet mới thấy dữ liệu cũ (tối đa CACHE_SECONDS,
 // hoặc bấm "Tải lại" trên trang để đọc thẳng Sheet). Users giữ ngắn để khoá tài khoản có hiệu lực nhanh.
-var CACHE_SECONDS = { leads: 600, statuses: 600, regs: 600, users: 60 };
+var CACHE_SECONDS = { leads: 600, statuses: 600, sources: 600, regs: 600, users: 60, history: 600 };
 
 // Bộ nhớ tạm trong một lần chạy (Apps Script khởi tạo lại biến toàn cục mỗi request).
 var memo_ = {};
@@ -71,6 +82,7 @@ function setupAdmin() {
   getSheet_(LEADS_SHEET, LEAD_COLS);
   getSheet_(ACTIVITIES_SHEET, ACTIVITY_COLS);
   ensureStatusesSeeded_();
+  ensureSourcesSeeded_();
   var users = getSheet_(USERS_SHEET, USER_COLS);
   if (users.getLastRow() < 2) {
     var owner = Session.getEffectiveUser().getEmail();
@@ -89,6 +101,7 @@ function warmCache() {
   memo_ = {};
   readUsers_();
   readStatuses_();
+  readSources_();
   cachedLeads_();
   cachedJson_('regs', readRegistrationsFromSheet_);
 }
@@ -136,9 +149,22 @@ function parseAdminBody_(e) {
   }
 }
 
+// Dữ liệu cache mỗi action cần — đọc gộp một lần (prefetchCache_) thay vì từng loại một.
+var PREFETCH = {
+  login: ['users', 'statuses', 'sources', 'leads'],
+  init: ['users', 'statuses', 'sources', 'leads'],
+  list: ['users', 'statuses', 'sources', 'leads'],
+  registrations: ['users', 'regs']
+};
+
 function handleAdminRequest_(body) {
   memo_ = {};
   try {
+    var names = (PREFETCH[body.action] || ['users', 'statuses', 'sources']).slice();
+    if (body.action === 'history' && SEGMENTS.indexOf(body.segment) >= 0 && normalizePhone_(body.phone)) {
+      names.push(historyCacheName_(body.segment, normalizePhone_(body.phone)));
+    }
+    prefetchCache_(names);
     // "login" xác minh Google ID token (sống ~1 giờ) rồi cấp phiên riêng SESSION_DAYS ngày;
     // các action khác dùng phiên đó.
     var user = body.action === 'login'
@@ -163,11 +189,11 @@ function dispatch_(action, body, user) {
       data.sessionExpiresAt = session.expiresAt;
       return data;
     case 'init':
-      return initData_(user);
+      return initData_(user, body.since);
     case 'list':
       // fresh = nút "Tải lại": bỏ qua cache, đọc thẳng Sheet (thấy cả thay đổi sửa tay trong Sheet).
-      if (body.fresh) ['leads', 'statuses', 'users'].forEach(invalidateCache_);
-      return { leads: cachedLeads_(), statuses: readStatuses_() };
+      if (body.fresh) ['leads', 'statuses', 'sources', 'users'].forEach(invalidateCache_);
+      return listData_(body.since);
     case 'create':
       return createLead_(body, user);
     case 'claim':
@@ -178,10 +204,10 @@ function dispatch_(action, body, user) {
       requireAdmin_(user);
       return assignLead_(body.segment, body.phone, body.assignedEmail, user);
     case 'history':
-      return { activities: readActivities_(parseSegment_(body.segment), normalizePhone_(body.phone), 500) };
+      return { activities: readLeadHistory_(parseSegment_(body.segment), normalizePhone_(body.phone), 500) };
     case 'activities':
       requireAdmin_(user);
-      return { activities: readActivities_('', '', 300) };
+      return { activities: readRecentActivities_(300) };
     case 'registrations':
       if (body.fresh) invalidateCache_('regs');
       return { registrations: readRegistrations_(user.role === 'ADMIN') };
@@ -200,18 +226,43 @@ function dispatch_(action, body, user) {
     case 'reorderStatuses':
       requireAdmin_(user);
       return reorderStatuses_(body.keys);
+    case 'saveSource':
+      requireAdmin_(user);
+      return saveSource_(body);
+    case 'deleteSource':
+      requireAdmin_(user);
+      return deleteSource_(body, user);
+    case 'reorderSources':
+      requireAdmin_(user);
+      return reorderSources_(body.keys);
     default:
       throw new ApiError('BAD_REQUEST', 'Action không hợp lệ: ' + action);
   }
 }
 
-function initData_(user) {
+function initData_(user, since) {
+  var data = listData_(since);
+  data.me = publicUser_(user);
+  data.users = readUsers_().map(publicUser_);
+  return data;
+}
+
+// since (ISO) = chỉ trả khách có updated_at từ thời điểm đó (trang đã có bản trước, chỉ cần phần
+// thay đổi). Không có since → toàn bộ danh sách.
+function listData_(since) {
+  var serverTime = new Date().toISOString();
+  var leads = cachedLeads_();
+  var from = parseDate_(since);
+  if (from) {
+    var iso = from.toISOString();
+    leads = leads.filter(function (l) { return String(l.updated_at) >= iso; });
+  }
   return {
-    me: publicUser_(user),
-    users: readUsers_().map(publicUser_),
+    leads: leads,
+    delta: !!from,
     statuses: readStatuses_(),
-    leads: cachedLeads_(),
-    serverTime: new Date().toISOString()
+    sources: readSources_(),
+    serverTime: serverTime
   };
 }
 
@@ -505,6 +556,9 @@ function createLead_(body, user) {
   var segment = parseSegment_(body.segment);
   var phone = normalizePhone_(body.phone);
   if (!phone) throw new ApiError('INVALID_PHONE', 'Số điện thoại không hợp lệ.');
+  var source = body.source ? parseSource_(body.source) : defaultSource_();
+  var contactDate = parseDate_(body.contactDate);
+  if (body.contactDate && !contactDate) throw new ApiError('BAD_REQUEST', 'Ngày liên hệ không hợp lệ.');
 
   return withLock_(function () {
     var existing = findLead_(segment, phone);
@@ -524,9 +578,10 @@ function createLead_(body, user) {
       next_followup_at: '',
       created_at: now,
       updated_at: now,
-      source: 'Nhập tay',
+      source: source,
       created_by: user.email,
-      segment: segment
+      segment: segment,
+      contact_date: contactDate || now
     };
     leadsSheet_().appendRow(leadToRow_(lead));
     logActivity_(lead, user, 'CREATE', '', lead.status, lead.note, '', lead.assigned_email);
@@ -617,6 +672,24 @@ function updateLead_(body, user) {
       }
     }
 
+    if (body.source !== undefined && body.source !== String(lead.source || '')) {
+      var newSource = parseSource_(body.source);
+      extra.push('Nguồn: ' + sourceLabel_(lead.source) + ' → ' + sourceLabel_(newSource));
+      lead.source = newSource;
+    }
+
+    if (body.contactDate !== undefined) {
+      var contact = parseDate_(body.contactDate);
+      if (!contact) throw new ApiError('BAD_REQUEST', 'Ngày liên hệ không hợp lệ.');
+      // Dòng cũ chưa có ngày liên hệ: coi như ngày tạo (giống cách trang hiển thị).
+      var oldContact = lead.contact_date instanceof Date ? lead.contact_date
+        : lead.created_at instanceof Date ? lead.created_at : null;
+      if (!oldContact || dayOf_(oldContact) !== dayOf_(contact)) {
+        extra.push('Ngày liên hệ: ' + (oldContact ? dayOf_(oldContact) : '-') + ' → ' + dayOf_(contact));
+        lead.contact_date = contact;
+      }
+    }
+
     if (body.customerName !== undefined) {
       var name = cleanText_(body.customerName, 100);
       if (name !== String(lead.customer_name || '')) {
@@ -688,9 +761,10 @@ function addLeadFromRegistration_(p) {
       note: summary ? 'Đăng ký: ' + summary : '',
       created_at: now,
       updated_at: now,
-      source: 'Form đăng ký',
+      source: FORM_SOURCE,
       created_by: '',
-      segment: 'DAO_TAO'
+      segment: 'DAO_TAO',
+      contact_date: now
     };
     leadsSheet_().appendRow(leadToRow_(lead));
     logActivity_(lead, system, 'CREATE', '', 'NEW', lead.note, '', '');
@@ -865,30 +939,263 @@ function reorderStatuses_(keys) {
   });
 }
 
+// ---------- Nguồn khách (ADMIN) ----------
+
+function readSources_() {
+  if (!memo_.sources) memo_.sources = cachedJson_('sources', readSourcesFromSheet_);
+  return memo_.sources;
+}
+
+function defaultSourceObjects_() {
+  return DEFAULT_SOURCES.map(function (d, i) {
+    return { key: d[0], label: d[1], order: i + 1, active: true, is_default: d[2] };
+  });
+}
+
+function readSourcesFromSheet_() {
+  var rows = readSourceRows_();
+  if (!rows.length) return defaultSourceObjects_();
+  defaultSourceObjects_().forEach(function (d) {
+    if (SYSTEM_SOURCES[d.key] && !rows.some(function (r) { return r.key === d.key; })) {
+      d.is_default = false;
+      rows.push(d);
+    }
+  });
+  // Luôn có đúng 1 nguồn mặc định (đang dùng).
+  var def = rows.filter(function (r) { return r.is_default && r.active; })[0]
+    || rows.filter(function (r) { return r.active; })[0];
+  return rows.map(function (r) {
+    return { key: r.key, label: r.label, order: r.order, active: r.active, is_default: r === def };
+  });
+}
+
+function readSourceRows_() {
+  return readRows_(getSheet_(SOURCES_SHEET, SOURCE_COLS), SOURCE_COLS).map(function (r) {
+    var key = String(r.key || '').trim().toUpperCase();
+    var active = String(r.active).toLowerCase();
+    return {
+      _row: r._row,
+      key: key,
+      label: String(r.label || key).trim(),
+      order: Number(r.order) || 0,
+      active: SYSTEM_SOURCES[key] ? true : active !== 'false' && active !== '0',
+      is_default: String(r.is_default).toLowerCase() === 'true'
+    };
+  }).filter(function (r) { return r.key; }).sort(function (a, b) { return a.order - b.order; });
+}
+
+function ensureSourcesSeeded_() {
+  var sheet = getSheet_(SOURCES_SHEET, SOURCE_COLS);
+  if (sheet.getLastRow() >= 2) return;
+  var values = defaultSourceObjects_().map(function (s) {
+    return [s.key, s.label, s.order, s.active, s.is_default];
+  });
+  sheet.getRange(2, 1, values.length, SOURCE_COLS.length).setValues(values);
+}
+
+function defaultSource_() {
+  var def = readSources_().filter(function (s) { return s.is_default; })[0];
+  return def ? def.key : FORM_SOURCE;
+}
+
+// Nguồn client gửi lên: phải là nguồn đang dùng.
+function parseSource_(value) {
+  var src = readSources_().filter(function (s) { return s.key === value; })[0];
+  if (!src) throw new ApiError('BAD_REQUEST', 'Nguồn không hợp lệ: ' + value);
+  if (!src.active) throw new ApiError('BAD_REQUEST', 'Nguồn "' + src.label + '" đã ngừng sử dụng.');
+  return src.key;
+}
+
+function sourceLabel_(value) {
+  var src = readSources_().filter(function (s) { return s.key === value; })[0];
+  return src ? src.label : String(value || '-');
+}
+
+function dayOf_(date) {
+  return Utilities.formatDate(date, 'Asia/Ho_Chi_Minh', 'dd/MM/yyyy');
+}
+
+function withSourcesLock_(fn) {
+  try {
+    return withLock_(function () {
+      ensureSourcesSeeded_();
+      return fn();
+    });
+  } finally {
+    invalidateCache_('sources');
+    memo_.sources = null;
+  }
+}
+
+function sourcesResult_() {
+  memo_.sources = null;
+  return { sources: readSourcesFromSheet_() };
+}
+
+// Ghi lại cột is_default sao cho chỉ defaultKey là TRUE.
+function writeSourceDefault_(sheet, rows, defaultKey) {
+  var col = SOURCE_COLS.indexOf('is_default') + 1;
+  var range = sheet.getRange(2, col, sheet.getLastRow() - 1, 1);
+  var values = range.getValues();
+  rows.forEach(function (r) { values[r._row - 2][0] = r.key === defaultKey; });
+  range.setValues(values);
+}
+
+function saveSource_(body) {
+  var label = cleanText_(body.label, 40);
+  if (!label) throw new ApiError('BAD_REQUEST', 'Vui lòng nhập tên nguồn.');
+
+  return withSourcesLock_(function () {
+    var sheet = getSheet_(SOURCES_SHEET, SOURCE_COLS);
+    var rows = readSourceRows_();
+    var key;
+    if (body.isNew) {
+      key = statusKeyFrom_(body.key || label);
+      if (!key) throw new ApiError('BAD_REQUEST', 'Mã nguồn không hợp lệ.');
+      if (rows.some(function (r) { return r.key === key; })) {
+        throw new ApiError('DUPLICATE', 'Mã nguồn ' + key + ' đã tồn tại.');
+      }
+      var order = rows.reduce(function (m, r) { return Math.max(m, r.order); }, 0) + 1;
+      sheet.appendRow([key, sheetSafe_(label), order, body.active !== false, false]);
+    } else {
+      key = String(body.key || '');
+      var row = rows.filter(function (r) { return r.key === key; })[0];
+      if (!row) throw new ApiError('NOT_FOUND', 'Không tìm thấy nguồn ' + key + '.');
+      var active = SYSTEM_SOURCES[key] ? true : body.active !== false;
+      var current = readSourcesFromSheet_().filter(function (s) { return s.is_default; })[0];
+      if (!active && (body.isDefault || (current && current.key === key))) {
+        throw new ApiError('BAD_REQUEST', 'Nguồn mặc định phải đang được dùng — chọn nguồn mặc định khác trước.');
+      }
+      sheet.getRange(row._row, 1, 1, 4).setValues([[key, sheetSafe_(label), row.order, active]]);
+    }
+    if (body.isDefault && (body.active !== false || SYSTEM_SOURCES[key])) {
+      writeSourceDefault_(sheet, readSourceRows_(), key);
+    }
+    return sourcesResult_();
+  });
+}
+
+// Xoá nguồn; khách thuộc nguồn đó chuyển sang migrateTo (có ghi lịch sử).
+function deleteSource_(body, me) {
+  var key = String(body.key || '');
+  if (SYSTEM_SOURCES[key]) throw new ApiError('FORBIDDEN', 'Không thể xoá nguồn hệ thống.');
+
+  return withSourcesLock_(function () {
+    var rows = readSourceRows_();
+    var target = rows.filter(function (r) { return r.key === key; })[0];
+    if (!target) throw new ApiError('NOT_FOUND', 'Không tìm thấy nguồn ' + key + '.');
+    var current = readSourcesFromSheet_().filter(function (s) { return s.is_default; })[0];
+    if (current && current.key === key) {
+      throw new ApiError('BAD_REQUEST', 'Đây là nguồn mặc định — chọn nguồn mặc định khác trước khi xoá.');
+    }
+    var leads = readLeadsWithRawStatus_().filter(function (l) { return String(l.source) === key; });
+    var dest = rows.filter(function (r) { return r.key === body.migrateTo && r.key !== key && r.active; })[0];
+    if (leads.length && !dest) {
+      throw new ApiError('BAD_REQUEST', 'Có ' + leads.length + ' khách thuộc nguồn này — chọn nguồn thay thế.');
+    }
+    leads.forEach(function (lead) {
+      lead.source = dest.key;
+      lead.updated_at = new Date();
+      writeLead_(lead);
+      logActivity_(lead, me, 'UPDATE', '', '', 'Nguồn: ' + target.label + ' (bị xoá) → ' + dest.label, '', '');
+    });
+    getSheet_(SOURCES_SHEET, SOURCE_COLS).deleteRow(target._row);
+    var result = sourcesResult_();
+    result.moved = leads.length;
+    return result;
+  });
+}
+
+function reorderSources_(keys) {
+  return withSourcesLock_(function () {
+    var rows = readSourceRows_();
+    if (!Array.isArray(keys) || keys.length !== rows.length
+        || rows.some(function (r) { return keys.indexOf(r.key) < 0; })) {
+      throw new ApiError('BAD_REQUEST', 'Danh sách nguồn đã thay đổi, vui lòng tải lại.');
+    }
+    var sheet = getSheet_(SOURCES_SHEET, SOURCE_COLS);
+    var col = SOURCE_COLS.indexOf('order') + 1;
+    var range = sheet.getRange(2, col, sheet.getLastRow() - 1, 1);
+    var values = range.getValues();
+    rows.forEach(function (r) { values[r._row - 2][0] = keys.indexOf(r.key) + 1; });
+    range.setValues(values);
+    return sourcesResult_();
+  });
+}
+
 // ---------- Activities ----------
 
 function logActivity_(lead, user, action, oldStatus, newStatus, note, followupAt, assignedEmail) {
   getSheet_(ACTIVITIES_SHEET, ACTIVITY_COLS).appendRow([
     new Date(), "'" + lead.phone, user.email, sheetSafe_(user.name), action,
-    oldStatus || '', newStatus || '', sheetSafe_(note), followupAt || '', assignedEmail || '', lead.segment
+    oldStatus || '', newStatus || '', sheetSafe_(note), followupAt || '', assignedEmail || '', segmentOf_(lead.segment)
   ]);
+  // Xoá cache lịch sử sau khi ghi xong (withLock_ gọi sau flush), để người đọc song song
+  // không kịp lưu bản cũ vào cache.
+  (memo_.dirtyHistory = memo_.dirtyHistory || []).push(historyCacheName_(segmentOf_(lead.segment), lead.phone));
 }
 
-// segment/phone rỗng = không lọc theo trường đó.
-function readActivities_(segment, phone, limit) {
-  var rows = readRows_(getSheet_(ACTIVITIES_SHEET, ACTIVITY_COLS), ACTIVITY_COLS);
-  var out = [];
-  for (var i = rows.length - 1; i >= 0 && out.length < limit; i--) {
-    var a = rows[i];
-    a.phone = normalizePhone_(a.phone);
-    a.segment = segmentOf_(a.segment);
-    if (phone && a.phone !== phone) continue;
-    if (segment && a.segment !== segment) continue;
-    var item = {};
-    ACTIVITY_COLS.forEach(function (col) { item[col] = serializeValue_(a[col]); });
-    out.push(item);
-  }
-  return out;
+function historyCacheName_(segment, phone) {
+  return 'hist_' + segment + '_' + phone;
+}
+
+function serializeActivity_(a) {
+  var item = {};
+  ACTIVITY_COLS.forEach(function (col) { item[col] = serializeValue_(a[col]); });
+  item.phone = normalizePhone_(a.phone) || item.phone;
+  item.segment = segmentOf_(a.segment);
+  return item;
+}
+
+// Hoạt động gần đây (tab Hoạt động): chỉ đọc `limit` dòng cuối của Sheet, mới nhất trước.
+function readRecentActivities_(limit) {
+  var sheet = getSheet_(ACTIVITIES_SHEET, ACTIVITY_COLS);
+  var last = sheet.getLastRow();
+  if (last < 2) return [];
+  var start = Math.max(2, last - limit + 1);
+  return sheet.getRange(start, 1, last - start + 1, ACTIVITY_COLS.length).getValues()
+    .map(function (row) {
+      var a = {};
+      ACTIVITY_COLS.forEach(function (col, j) { a[col] = row[j]; });
+      return serializeActivity_(a);
+    }).reverse();
+}
+
+// Lịch sử một khách (có cache, xoá khi khách đó có hoạt động mới).
+// Không đọc cả tab Activities: chỉ đọc cột SĐT để tìm dòng, rồi đọc các cụm dòng khớp.
+function readLeadHistory_(segment, phone, limit) {
+  return cachedJson_(historyCacheName_(segment, phone), function () {
+    var sheet = getSheet_(ACTIVITIES_SHEET, ACTIVITY_COLS);
+    var last = sheet.getLastRow();
+    if (last < 2) return [];
+    var phoneCol = ACTIVITY_COLS.indexOf('phone') + 1;
+    var rows = [];
+    sheet.getRange(2, phoneCol, last - 1, 1).getValues().forEach(function (v, i) {
+      if (normalizePhone_(v[0]) === phone) rows.push(i + 2);
+    });
+    var out = [];
+    groupRows_(rows, 30).forEach(function (g) {
+      var values = sheet.getRange(g.from, 1, g.to - g.from + 1, ACTIVITY_COLS.length).getValues();
+      values.forEach(function (row, k) {
+        if (rows.indexOf(g.from + k) < 0) return;
+        var a = {};
+        ACTIVITY_COLS.forEach(function (col, j) { a[col] = row[j]; });
+        if (segmentOf_(a.segment) === segment) out.push(serializeActivity_(a));
+      });
+    });
+    return out.reverse().slice(0, limit);
+  }, CACHE_SECONDS.history);
+}
+
+// [5, 6, 9, 200] (gap 30) → [{from:5,to:9}, {from:200,to:200}]: gộp dòng gần nhau để ít lượt đọc.
+function groupRows_(rows, gap) {
+  var groups = [];
+  rows.forEach(function (r) {
+    var g = groups[groups.length - 1];
+    if (g && r - g.to <= gap) g.to = r;
+    else groups.push({ from: r, to: r });
+  });
+  return groups;
 }
 
 // ---------- Đăng ký (tab DangKy) ----------
@@ -929,6 +1236,8 @@ function withLock_(fn) {
     return result;
   } finally {
     SpreadsheetApp.flush();
+    (memo_.dirtyHistory || []).forEach(invalidateCache_);
+    memo_.dirtyHistory = [];
     // Thao tác trên 1 khách: sửa thẳng khách đó trong cache để lần đọc sau vẫn nhanh.
     // Còn lại (đổi nhiều khách, lỗi giữa chừng...) thì xoá cache cho chắc.
     if (!(result && result.lead && patchLeadsCache_(result.lead))) invalidateCache_('leads');
@@ -941,7 +1250,45 @@ function withLock_(fn) {
 // Mỗi loại dữ liệu có một "phiên bản" (name_ver). Ghi dữ liệu = đổi phiên bản, nên cache cũ
 // tự mất hiệu lực. Người đọc chỉ lưu cache nếu phiên bản không đổi trong lúc mình đọc Sheet,
 // tránh trường hợp đọc dữ liệu cũ rồi ghi đè lên cache sau khi người khác vừa sửa.
-function cachedJson_(name, build) {
+// Đọc cache của nhiều loại dữ liệu trong 3 lượt gọi CacheService (phiên bản → số phần → các phần),
+// thay vì ~3 lượt cho mỗi loại. Kết quả để trong memo_.prefetched cho cachedJson_ dùng.
+function prefetchCache_(names) {
+  memo_.prefetched = {};
+  try {
+    var cache = CacheService.getScriptCache();
+    var vers = cache.getAll(names.map(function (n) { return n + '_ver'; }));
+    var withVer = names.filter(function (n) { return vers[n + '_ver']; });
+    if (!withVer.length) return;
+    var prefix = {};
+    withVer.forEach(function (n) { prefix[n] = n + '_' + vers[n + '_ver']; });
+    var counts = cache.getAll(withVer.map(function (n) { return prefix[n] + '_n'; }));
+    var keys = [];
+    withVer.forEach(function (n) {
+      var count = Number(counts[prefix[n] + '_n']) || 0;
+      for (var i = 0; i < count; i++) keys.push(prefix[n] + '_' + i);
+    });
+    var chunks = keys.length ? cache.getAll(keys) : {};
+    withVer.forEach(function (n) {
+      var count = Number(counts[prefix[n] + '_n']) || 0;
+      var parts = [];
+      for (var i = 0; i < count; i++) {
+        var part = chunks[prefix[n] + '_' + i];
+        if (part == null) return; // thiếu phần → coi như chưa có cache
+        parts.push(part);
+      }
+      if (count) memo_.prefetched[n] = parts.join('');
+    });
+  } catch (err) {
+    console.warn('Không đọc được cache: ' + err);
+  }
+}
+
+function cachedJson_(name, build, ttl) {
+  var pre = memo_.prefetched && memo_.prefetched[name];
+  if (pre) {
+    delete memo_.prefetched[name];
+    return JSON.parse(pre);
+  }
   var cache = CacheService.getScriptCache();
   var ver = cache.get(name + '_ver');
   if (ver) {
@@ -954,7 +1301,7 @@ function cachedJson_(name, build) {
   var data = build();
   try {
     if (cache.get(name + '_ver') === ver) {
-      putChunks_(cache, name + '_' + ver, JSON.stringify(data), CACHE_SECONDS[name] || 60);
+      putChunks_(cache, name + '_' + ver, JSON.stringify(data), ttl || CACHE_SECONDS[name] || 60);
     }
   } catch (err) {
     console.warn('Không ghi được cache ' + name + ': ' + err);
@@ -991,6 +1338,7 @@ function patchLeadsCache_(lead) {
 }
 
 function invalidateCache_(name) {
+  if (memo_.prefetched) delete memo_.prefetched[name];
   CacheService.getScriptCache().put(name + '_ver', Utilities.getUuid(), 21600);
 }
 

@@ -34,6 +34,7 @@
       <button type="button" data-tab="activity" data-admin-only>Hoạt động</button>
       <button type="button" data-tab="sales" data-admin-only>Sales</button>
       <button type="button" data-tab="statuses" data-admin-only>Trạng thái</button>
+      <button type="button" data-tab="sources" data-admin-only>Nguồn</button>
     </nav>
     <div class="me">
       <span id="meName"></span>
@@ -61,6 +62,7 @@
       <div class="filters">
         <div id="chips" class="chips"></div>
         <select id="saleFilter" class="sale-filter" aria-label="Lọc theo Sales"></select>
+        <select id="sourceFilter" class="sale-filter" aria-label="Lọc theo nguồn"></select>
       </div>
 
       <div class="table-wrap">
@@ -69,6 +71,7 @@
             <tr>
               <th>SĐT</th>
               <th>Khách hàng</th>
+              <th>Nguồn / Ngày LH</th>
               <th>Sales phụ trách</th>
               <th>Trạng thái</th>
               <th>Lần chăm sóc cuối</th>
@@ -79,6 +82,7 @@
           <tbody id="leadRows"></tbody>
         </table>
       </div>
+      <div id="leadPager" class="pager"></div>
       <p id="listInfo" class="list-info"></p>
     </section>
 
@@ -115,6 +119,7 @@
           <tbody id="regRows"></tbody>
         </table>
       </div>
+      <div id="regPager" class="pager"></div>
       <p id="regInfo" class="list-info"></p>
     </section>
 
@@ -178,6 +183,31 @@
         không còn tính là đang chăm sóc và không hiện trong "Gọi lại hôm nay". Trạng thái 🔒 là trạng thái hệ thống:
         chỉ đổi được tên và màu.</p>
     </section>
+    <section id="tab-sources" hidden>
+      <div class="section-head">
+        <h2 class="section-title">Nguồn khách</h2>
+        <button type="button" class="btn primary" data-source-new>+ Thêm nguồn</button>
+      </div>
+      <div class="table-wrap">
+        <table class="plain">
+          <thead>
+            <tr>
+              <th>Thứ tự</th>
+              <th>Tên</th>
+              <th>Mã</th>
+              <th>Mặc định</th>
+              <th>Số khách (ĐT / XD)</th>
+              <th>Sử dụng</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="sourceRows"></tbody>
+        </table>
+      </div>
+      <p id="sourceLegacy" class="list-info"></p>
+      <p class="list-info">Nguồn mặc định được chọn sẵn khi thêm khách. Nguồn 🔒 Web gắn cho khách tự điền form
+        đăng ký trên web nên không xoá được.</p>
+    </section>
   </main>
 </div>
 
@@ -197,6 +227,10 @@
   <div id="statusDialogBody"></div>
 </dialog>
 
+<dialog id="sourceDialog" class="dialog">
+  <div id="sourceDialogBody"></div>
+</dialog>
+
 <dialog id="addDialog" class="dialog">
   <form id="addForm" class="dialog-inner" novalidate>
     <div class="dialog-head">
@@ -212,6 +246,16 @@
       <span>Tên khách hàng</span>
       <input name="customerName" type="text" autocomplete="off">
     </label>
+    <div class="field-row">
+      <label class="field">
+        <span>Nguồn</span>
+        <select name="source"></select>
+      </label>
+      <label class="field">
+        <span>Ngày liên hệ</span>
+        <input name="contactDate" type="date" required>
+      </label>
+    </div>
     <label class="field">
       <span>Ghi chú</span>
       <textarea name="note" rows="3"></textarea>
