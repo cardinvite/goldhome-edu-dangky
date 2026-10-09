@@ -509,3 +509,17 @@ input[readonly] { background: var(--gray-bg); color: var(--muted); }
 .pager-btns .btn { min-width: 36px; padding: 6px 10px; }
 .pager-btns .btn.active { background: var(--primary); border-color: var(--primary); color: var(--ink); font-weight: 700; }
 .pager-gap { padding: 0 4px; color: var(--muted); }
+
+/* Nhật ký chăm sóc */
+.care-box { background: #fffbeb; border: 1px solid #f3e1a6; border-radius: 10px; padding: 12px 12px 4px; margin-bottom: 14px; }
+.care-box .btn { margin-bottom: 8px; }
+.care-count { display: inline-block; font-size: 0.75rem; font-weight: 700; color: var(--primary-dark); background: #fff4d0; border-radius: 999px; padding: 1px 8px; margin-right: 4px; }
+.notes { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.note-item { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: #fff; }
+.note-head { font-size: 0.82rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; }
+.note-head strong { color: var(--text); }
+.note-actions { margin-left: auto; display: flex; gap: 10px; }
+.note-text { margin-top: 4px; font-size: 0.92rem; line-height: 1.5; }
+.note-edit { margin-top: 6px; }
+.note-edit .dialog-actions { margin-top: 6px; }
+.link.danger-text { color: var(--error); }

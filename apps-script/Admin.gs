@@ -11,10 +11,15 @@ var USERS_SHEET = 'Users';
 // Cột mới luôn thêm vào CUỐI để dữ liệu cũ trong Sheet vẫn đọc đúng.
 var LEAD_COLS = ['phone', 'customer_name', 'assigned_email', 'status', 'note',
   'last_contacted_at', 'next_followup_at', 'created_at', 'updated_at', 'source', 'created_by', 'segment',
-  'contact_date'];
+  'contact_date', 'care_count', 'last_care_note'];
 var ACTIVITY_COLS = ['created_at', 'phone', 'user_email', 'user_name', 'action',
   'old_status', 'new_status', 'note', 'followup_at', 'assigned_email', 'segment'];
 var USER_COLS = ['email', 'name', 'role', 'active'];
+// Nhật ký chăm sóc: mỗi lần chăm sóc một dòng (sửa được, xoá mềm bằng cột deleted).
+// Tab Activities vẫn là nhật ký chỉ ghi thêm (ghi lại cả lúc thêm / sửa / xoá).
+var NOTES_SHEET = 'Notes';
+var NOTE_COLS = ['id', 'created_at', 'segment', 'phone', 'user_email', 'user_name', 'note',
+  'updated_at', 'updated_by', 'deleted'];
 // Thứ tự cột của tab DangKy (do Code.gs ghi khi khách gửi form).
 var REG_SHEET = 'DangKy';
 var REG_COLS = ['created_at', 'name', 'birthday', 'cccd', 'address', 'phone', 'zalo',
@@ -81,6 +86,7 @@ function ApiError(code, message, data) {
 function setupAdmin() {
   getSheet_(LEADS_SHEET, LEAD_COLS);
   getSheet_(ACTIVITIES_SHEET, ACTIVITY_COLS);
+  getSheet_(NOTES_SHEET, NOTE_COLS);
   ensureStatusesSeeded_();
   ensureSourcesSeeded_();
   var users = getSheet_(USERS_SHEET, USER_COLS);
@@ -163,6 +169,7 @@ function handleAdminRequest_(body) {
     var names = (PREFETCH[body.action] || ['users', 'statuses', 'sources']).slice();
     if (body.action === 'history' && SEGMENTS.indexOf(body.segment) >= 0 && normalizePhone_(body.phone)) {
       names.push(historyCacheName_(body.segment, normalizePhone_(body.phone)));
+      names.push(notesCacheName_(body.segment, normalizePhone_(body.phone)));
     }
     prefetchCache_(names);
     // "login" xác minh Google ID token (sống ~1 giờ) rồi cấp phiên riêng SESSION_DAYS ngày;
@@ -204,7 +211,14 @@ function dispatch_(action, body, user) {
       requireAdmin_(user);
       return assignLead_(body.segment, body.phone, body.assignedEmail, user);
     case 'history':
-      return { activities: readLeadHistory_(parseSegment_(body.segment), normalizePhone_(body.phone), 500) };
+      var hSegment = parseSegment_(body.segment);
+      var hPhone = normalizePhone_(body.phone);
+      return { activities: readLeadHistory_(hSegment, hPhone, 500), notes: readLeadNotes_(hSegment, hPhone) };
+    case 'editNote':
+      return editNote_(body, user);
+    case 'deleteNote':
+      requireAdmin_(user);
+      return deleteNote_(body, user);
     case 'activities':
       requireAdmin_(user);
       return { activities: readRecentActivities_(300) };
@@ -628,6 +642,7 @@ function updateLead_(body, user) {
     var followupChanged = false;
     var extra = [];
     var assignNote = '';
+    var careNote = cleanText_(body.careNote, 2000);
 
     // ADMIN chuyển sales phụ trách ngay trong form (cùng lần LƯU).
     if (body.assignedEmail !== undefined) {
@@ -699,15 +714,21 @@ function updateLead_(body, user) {
     }
 
     var otherChanged = statusChanged || noteChanged || followupChanged || extra.length;
-    if (!otherChanged && !assignNote) {
+    if (!otherChanged && !assignNote && !careNote) {
       return { lead: serializeLead_(lead) };
     }
 
     var now = new Date();
-    if (statusChanged || noteChanged) lead.last_contacted_at = now;
+    if (statusChanged || noteChanged || careNote) lead.last_contacted_at = now;
     lead.updated_at = now;
+    if (careNote) {
+      appendNote_(lead, user, careNote, now);
+      lead.care_count = (Number(lead.care_count) || 0) + 1;
+      lead.last_care_note = careNote;
+    }
     writeLead_(lead);
 
+    if (careNote) logActivity_(lead, user, 'CARE', '', '', careNote, '', '');
     if (assignNote) logActivity_(lead, user, 'ASSIGN', '', '', assignNote, '', lead.assigned_email);
     if (otherChanged) {
       var logLines = noteChanged ? [lead.note || '(Xoá ghi chú)'] : [];
@@ -1123,6 +1144,132 @@ function reorderSources_(keys) {
   });
 }
 
+// ---------- Nhật ký chăm sóc (tab Notes) ----------
+
+function notesCacheName_(segment, phone) {
+  return 'notes_' + segment + '_' + phone;
+}
+
+function appendNote_(lead, user, note, now) {
+  getSheet_(NOTES_SHEET, NOTE_COLS).appendRow([
+    Utilities.getUuid(), now, segmentOf_(lead.segment), "'" + lead.phone, user.email, sheetSafe_(user.name),
+    sheetSafe_(note), '', '', false
+  ]);
+  markDirty_(notesCacheName_(segmentOf_(lead.segment), lead.phone));
+}
+
+// Các lần chăm sóc (chưa xoá) của một khách, cũ → mới, kèm số dòng trong Sheet.
+function readNoteRows_(segment, phone) {
+  var sheet = getSheet_(NOTES_SHEET, NOTE_COLS);
+  var last = sheet.getLastRow();
+  if (last < 2) return [];
+  var phoneCol = NOTE_COLS.indexOf('phone') + 1;
+  var rows = [];
+  sheet.getRange(2, phoneCol, last - 1, 1).getValues().forEach(function (v, i) {
+    if (normalizePhone_(v[0]) === phone) rows.push(i + 2);
+  });
+  var wanted = {};
+  rows.forEach(function (r) { wanted[r] = true; });
+  var out = [];
+  groupRows_(rows, 30).forEach(function (g) {
+    sheet.getRange(g.from, 1, g.to - g.from + 1, NOTE_COLS.length).getValues().forEach(function (row, k) {
+      if (!wanted[g.from + k]) return;
+      var n = { _row: g.from + k };
+      NOTE_COLS.forEach(function (col, j) { n[col] = row[j]; });
+      if (segmentOf_(n.segment) !== segment || String(n.deleted).toLowerCase() === 'true') return;
+      out.push(n);
+    });
+  });
+  return out;
+}
+
+function serializeNotes_(rows) {
+  return rows.map(function (n, i) {
+    return {
+      id: String(n.id),
+      no: i + 1, // lần thứ mấy
+      created_at: serializeValue_(n.created_at),
+      user_email: String(n.user_email || '').toLowerCase(),
+      user_name: String(n.user_name || ''),
+      note: String(n.note || ''),
+      updated_at: serializeValue_(n.updated_at),
+      updated_by: String(n.updated_by || '')
+    };
+  }).reverse(); // mới nhất trước
+}
+
+function readLeadNotes_(segment, phone) {
+  return cachedJson_(notesCacheName_(segment, phone), function () {
+    return serializeNotes_(readNoteRows_(segment, phone));
+  }, CACHE_SECONDS.history);
+}
+
+// Sau khi sửa / xoá: tính lại số lần và nội dung lần gần nhất trên dòng Leads.
+function refreshLeadCare_(lead, rows, now) {
+  var latest = rows.length ? String(rows[rows.length - 1].note || '') : '';
+  if (Number(lead.care_count) === rows.length && String(lead.last_care_note || '') === latest) return;
+  lead.care_count = rows.length;
+  lead.last_care_note = latest;
+  lead.updated_at = now;
+  writeLead_(lead);
+}
+
+function findNote_(rows, id) {
+  var n = rows.filter(function (r) { return String(r.id) === String(id); })[0];
+  if (!n) throw new ApiError('NOT_FOUND', 'Không tìm thấy lần chăm sóc này (có thể đã bị xoá).');
+  return n;
+}
+
+// SALE: chỉ sửa lần chăm sóc của chính mình, trong ngày tạo (giờ Việt Nam). ADMIN: sửa mọi lần.
+function editNote_(body, user) {
+  var text = cleanText_(body.note, 2000);
+  if (!text) throw new ApiError('BAD_REQUEST', 'Nội dung không được để trống.');
+  return withLock_(function () {
+    var lead = mustFindLead_(body.segment, body.phone);
+    var rows = readNoteRows_(lead.segment, lead.phone);
+    var n = findNote_(rows, body.id);
+    if (user.role !== 'ADMIN') {
+      if (String(n.user_email || '').toLowerCase() !== user.email) {
+        throw new ApiError('FORBIDDEN', 'Bạn chỉ sửa được lần chăm sóc của chính mình.');
+      }
+      if (!(n.created_at instanceof Date) || dayOf_(n.created_at) !== dayOf_(new Date())) {
+        throw new ApiError('FORBIDDEN', 'Chỉ sửa được trong ngày tạo. Liên hệ ADMIN nếu cần sửa.');
+      }
+    }
+    var now = new Date();
+    var old = String(n.note || '');
+    if (text !== old) {
+      var sheet = getSheet_(NOTES_SHEET, NOTE_COLS);
+      var noteCol = NOTE_COLS.indexOf('note') + 1;
+      sheet.getRange(n._row, noteCol, 1, 3).setValues([[sheetSafe_(text), now, user.email]]);
+      n.note = text;
+      markDirty_(notesCacheName_(lead.segment, lead.phone));
+      logActivity_(lead, user, 'NOTE_EDIT', '', '',
+        'Sửa lần chăm sóc ' + (rows.indexOf(n) + 1) + ':\n' + old + '\n→ ' + text, '', '');
+      refreshLeadCare_(lead, rows, now);
+    }
+    return { lead: serializeLead_(lead), notes: serializeNotes_(rows) };
+  });
+}
+
+function deleteNote_(body, user) {
+  return withLock_(function () {
+    var lead = mustFindLead_(body.segment, body.phone);
+    var rows = readNoteRows_(lead.segment, lead.phone);
+    var n = findNote_(rows, body.id);
+    var now = new Date();
+    var sheet = getSheet_(NOTES_SHEET, NOTE_COLS);
+    var col = NOTE_COLS.indexOf('updated_at') + 1;
+    sheet.getRange(n._row, col, 1, 3).setValues([[now, user.email, true]]);
+    markDirty_(notesCacheName_(lead.segment, lead.phone));
+    logActivity_(lead, user, 'NOTE_DELETE', '', '',
+      'Xoá lần chăm sóc ' + (rows.indexOf(n) + 1) + ': ' + String(n.note || ''), '', '');
+    rows.splice(rows.indexOf(n), 1);
+    refreshLeadCare_(lead, rows, now);
+    return { lead: serializeLead_(lead), notes: serializeNotes_(rows) };
+  });
+}
+
 // ---------- Activities ----------
 
 function logActivity_(lead, user, action, oldStatus, newStatus, note, followupAt, assignedEmail) {
@@ -1130,9 +1277,13 @@ function logActivity_(lead, user, action, oldStatus, newStatus, note, followupAt
     new Date(), "'" + lead.phone, user.email, sheetSafe_(user.name), action,
     oldStatus || '', newStatus || '', sheetSafe_(note), followupAt || '', assignedEmail || '', segmentOf_(lead.segment)
   ]);
-  // Xoá cache lịch sử sau khi ghi xong (withLock_ gọi sau flush), để người đọc song song
-  // không kịp lưu bản cũ vào cache.
-  (memo_.dirtyHistory = memo_.dirtyHistory || []).push(historyCacheName_(segmentOf_(lead.segment), lead.phone));
+  markDirty_(historyCacheName_(segmentOf_(lead.segment), lead.phone));
+}
+
+// Cache cần xoá sau khi ghi xong (withLock_ xoá sau flush), để người đọc song song
+// không kịp lưu bản cũ vào cache.
+function markDirty_(name) {
+  (memo_.dirtyCaches = memo_.dirtyCaches || []).push(name);
 }
 
 function historyCacheName_(segment, phone) {
@@ -1236,8 +1387,8 @@ function withLock_(fn) {
     return result;
   } finally {
     SpreadsheetApp.flush();
-    (memo_.dirtyHistory || []).forEach(invalidateCache_);
-    memo_.dirtyHistory = [];
+    (memo_.dirtyCaches || []).forEach(invalidateCache_);
+    memo_.dirtyCaches = [];
     // Thao tác trên 1 khách: sửa thẳng khách đó trong cache để lần đọc sau vẫn nhanh.
     // Còn lại (đổi nhiều khách, lỗi giữa chừng...) thì xoá cache cho chắc.
     if (!(result && result.lead && patchLeadsCache_(result.lead))) invalidateCache_('leads');

@@ -1,5 +1,5 @@
 // Giống WEB_APP_URL trong script.js — cùng một Apps Script Web App.
-const API_URL = 'https://script.google.com/macros/s/AKfycbytJ_432pbueg2w3_lj_W7tUtcNywnfY28dFK_lZ4Yu3j8MvH7T_wycxv1UZQfU0APoVQ/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbyBsjbtVrh9AloNSxRB0UdPsqPMQiX-f2mFg9HUEpWfW42-pfMSOXnDCWACWjPazd9PvA/exec';
 // OAuth Client ID tạo trong Google Cloud Console — xem README.md.
 const GOOGLE_CLIENT_ID = '884064042089-drsbl39b8utv2rttar95aaoea45pstt8.apps.googleusercontent.com';
 
@@ -675,7 +675,7 @@ function leadSummary(lead) {
       <dt>Ngày liên hệ</dt><dd>${fmtDay(contactOf(lead))}</dd>
       <dt>Lần chăm sóc gần nhất</dt><dd>${fmtFull(lead.last_contacted_at)}</dd>
       <dt>Hẹn gọi lại</dt><dd>${fmtFull(lead.next_followup_at)}</dd>
-      <dt>Ghi chú</dt><dd class="pre">${esc(lead.note) || '-'}</dd>
+      <dt>Ghi chú chung</dt><dd class="pre">${esc(lead.note) || '-'}</dd>
     </dl>`;
 }
 
@@ -761,7 +761,7 @@ function renderLeads() {
       <td data-label="Trạng thái">${badge(lead.status)}</td>
       <td data-label="Chăm sóc cuối">${fmtShort(lead.last_contacted_at)}</td>
       <td data-label="Gọi lại" class="${followupClass(lead)}">${fmtShort(lead.next_followup_at)}</td>
-      <td data-label="Ghi chú" class="note">${esc(lead.note) || '-'}</td>
+      <td data-label="Ghi chú" class="note">${careCount(lead) ? `<span class="care-count">${careCount(lead)} lần</span> ` : ''}${esc(lead.last_care_note || lead.note) || '-'}</td>
     </tr>`).join('');
 
   let info = '';
@@ -845,6 +845,14 @@ function renderLeadDialog(lead) {
 
   const form = editable ? `
     <form id="updateForm" class="update-form" data-phone="${esc(lead.phone)}" data-seg="${esc(lead.segment)}">
+      <div class="care-box">
+        <label class="field">
+          <span>Nội dung lần chăm sóc này <span class="muted">(lần ${careCount(lead) + 1})</span></span>
+          <textarea name="careNote" rows="3" placeholder="VD: Đã gọi, khách hỏi giá gói thiết kế, hẹn gửi báo giá..."></textarea>
+        </label>
+        ${STATUS.NO_ANSWER && STATUS.NO_ANSWER.active !== false ? `
+        <button type="button" class="btn ghost" data-quick-care>📞 Gọi không nghe máy (hẹn lại sau 2 giờ)</button>` : ''}
+      </div>
       <label class="field">
         <span>Tên khách hàng</span>
         <input name="customerName" type="text" value="${esc(lead.customer_name)}" autocomplete="off">
@@ -865,7 +873,7 @@ function renderLeadDialog(lead) {
         <select name="status">${statusOptions}</select>
       </label>
       <label class="field">
-        <span>Ghi chú</span>
+        <span>Ghi chú chung <span class="muted">(thông tin cố định về khách: nhu cầu, link Messenger...)</span></span>
         <textarea name="note" rows="3">${esc(lead.note)}</textarea>
       </label>
       <label class="field">
@@ -901,9 +909,101 @@ function renderLeadDialog(lead) {
           <button type="button" class="link" data-open="${esc(o.phone)}" data-seg="${esc(o.segment)}">Mở</button></div>`).join('')}
       ${assignment}
       ${form}
-      <h3 class="history-title">Lịch sử chăm sóc</h3>
+      <h3 class="history-title">Nhật ký chăm sóc <span class="muted" id="notesCount">${careCount(lead) ? `(${careCount(lead)} lần)` : ''}</span></h3>
+      <div id="notesList" class="notes"><p class="muted">Đang tải...</p></div>
+      <h3 class="history-title">Lịch sử thay đổi</h3>
       <div id="historyList" class="timeline"><p class="muted">Đang tải...</p></div>
     </div>`;
+}
+
+function careCount(lead) {
+  return Number(lead.care_count) || 0;
+}
+
+// ---------- Nhật ký chăm sóc ----------
+
+function sameLocalDay(iso, date = new Date()) {
+  const d = new Date(iso);
+  return d.getFullYear() === date.getFullYear() && d.getMonth() === date.getMonth() && d.getDate() === date.getDate();
+}
+
+// SALE: lần của chính mình, trong ngày tạo. ADMIN: mọi lần. (Máy chủ kiểm tra lại.)
+function canEditNote(n) {
+  return state.me.role === 'ADMIN' || (n.user_email === state.me.email && sameLocalDay(n.created_at));
+}
+
+function renderNotes(notes) {
+  if (!notes.length) return '<p class="muted">Chưa có lần chăm sóc nào.</p>';
+  return notes.map((n) => `
+    <div class="note-item" data-note-id="${esc(n.id)}">
+      <div class="note-head">
+        <strong>Lần ${n.no}</strong> · ${fmtFull(n.created_at)} · ${esc(n.user_name || userName(n.user_email))}
+        ${n.updated_at ? `<span class="muted" title="Sửa lúc ${fmtFull(n.updated_at)} bởi ${esc(userName(n.updated_by))}">(đã sửa)</span>` : ''}
+        <span class="note-actions">
+          ${canEditNote(n) ? `<button type="button" class="link" data-note-edit="${esc(n.id)}">Sửa</button>` : ''}
+          ${state.me.role === 'ADMIN' ? `<button type="button" class="link danger-text" data-note-del="${esc(n.id)}">Xoá</button>` : ''}
+        </span>
+      </div>
+      <div class="note-text pre">${esc(n.note)}</div>
+    </div>`).join('');
+}
+
+function showNotes(key, notes) {
+  if (state.openKey !== key || !$('notesList')) return;
+  $('notesList').innerHTML = renderNotes(notes);
+  $('notesCount').textContent = notes.length ? `(${notes.length} lần)` : '';
+}
+
+function findCachedNote(id) {
+  return (historyCache.get(state.openKey)?.notes || []).find((n) => n.id === id);
+}
+
+function startEditNote(id) {
+  const n = findCachedNote(id);
+  const item = document.querySelector(`[data-note-id="${CSS.escape(id)}"]`);
+  if (!n || !item) return;
+  item.querySelector('.note-text').outerHTML = `
+    <div class="note-edit">
+      <textarea rows="3">${esc(n.note)}</textarea>
+      <div class="dialog-actions">
+        <button type="button" class="btn ghost" data-note-cancel>Huỷ</button>
+        <button type="button" class="btn primary" data-note-save="${esc(id)}">Lưu</button>
+      </div>
+    </div>`;
+  item.querySelector('textarea').focus();
+}
+
+async function saveNote(action, id, extra = {}) {
+  const [segment, phone] = state.openKey.split('|');
+  const key = state.openKey;
+  setSyncing(true);
+  try {
+    const data = await api(action, { segment, phone, id, ...extra });
+    upsertLead(data.lead);
+    renderLeads();
+    const cached = historyCache.get(key);
+    if (cached) cached.notes = data.notes;
+    showNotes(key, data.notes);
+    loadHistory(segment, phone);
+    toast(action === 'deleteNote' ? 'Đã xoá lần chăm sóc.' : 'Đã sửa lần chăm sóc.', 'success');
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    setSyncing(false);
+  }
+}
+
+function submitEditNote(id, button) {
+  const text = button.closest('.note-edit').querySelector('textarea').value.trim();
+  if (!text) return toast('Nội dung không được để trống.', 'error');
+  button.disabled = true;
+  saveNote('editNote', id, { note: text });
+}
+
+function deleteNote(id) {
+  const n = findCachedNote(id);
+  if (!n || !confirm(`Xoá lần chăm sóc ${n.no}?\n\n${n.note}`)) return;
+  saveNote('deleteNote', id);
 }
 
 function describeActivity(a) {
@@ -921,6 +1021,14 @@ function describeActivity(a) {
       break;
     case 'FORM':
       lines.push(esc(a.note));
+      break;
+    case 'CARE':
+      lines.push(`${who} chăm sóc: <span class="pre">${esc(a.note)}</span>`);
+      break;
+    case 'NOTE_EDIT':
+    case 'NOTE_DELETE':
+      lines.push(`${who} ${a.action === 'NOTE_EDIT' ? 'sửa' : 'xoá'} nhật ký chăm sóc.`);
+      lines.push(`<span class="pre muted">${esc(a.note)}</span>`);
       break;
     default:
       lines.push(`${who} cập nhật.`);
@@ -952,17 +1060,23 @@ const historyCache = new Map();
 
 async function loadHistory(segment, phone) {
   const key = segment + '|' + phone;
-  const show = (activities) => {
-    if (state.openKey === key && $('historyList')) $('historyList').innerHTML = renderTimeline(activities, false);
+  const show = (data) => {
+    // Lần chăm sóc đã hiện ở "Nhật ký chăm sóc" → không lặp lại trong lịch sử thay đổi.
+    if (state.openKey === key && $('historyList')) {
+      $('historyList').innerHTML = renderTimeline(data.activities.filter((a) => a.action !== 'CARE'), false);
+    }
+    // Đang sửa một lần chăm sóc thì không vẽ lại (mất nội dung đang gõ).
+    if (!document.querySelector('#notesList .note-edit')) showNotes(key, data.notes || []);
   };
   if (historyCache.has(key)) show(historyCache.get(key));
   try {
     const data = await api('history', { segment, phone });
-    historyCache.set(key, data.activities);
-    show(data.activities);
+    historyCache.set(key, data);
+    show(data);
   } catch (err) {
     if (!historyCache.has(key) && $('historyList')) {
       $('historyList').innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
+      $('notesList').innerHTML = '';
     }
   }
 }
@@ -1009,6 +1123,7 @@ async function runLeadAction(action, params, successMessage, predict, options = 
   try {
     const data = await api(action, params);
     pendingLeads.delete(key);
+    historyCache.delete(key); // lịch sử / nhật ký đã thay đổi
     upsertLead(data.lead);
     renderLeads();
     // Không vẽ lại form (người dùng có thể đang gõ tiếp) — chỉ tải lại lịch sử.
@@ -1037,12 +1152,15 @@ function claimLead(segment, phone) {
   });
 }
 
-function updateLead(form) {
+// overrides: dùng cho nút ghi nhanh (VD: "Gọi không nghe máy").
+function updateLead(form, overrides = {}) {
   const values = {
     customerName: form.customerName.value.trim(),
     status: form.status.value,
     note: form.note.value.trim(),
     followupAt: form.followupAt.value ? new Date(form.followupAt.value).toISOString() : '',
+    careNote: form.careNote.value.trim(),
+    ...overrides,
   };
   if (form.assignedEmail) values.assignedEmail = form.assignedEmail.value; // chỉ ADMIN có ô này
   if (form.source.value) values.source = form.source.value;
@@ -1052,7 +1170,11 @@ function updateLead(form) {
   const segment = form.dataset.seg;
   const phone = form.dataset.phone;
   runLeadAction('update', { segment, phone, ...values }, 'Đã lưu.', (l) => {
-    if (values.status !== l.status || values.note !== (l.note || '')) l.last_contacted_at = l.updated_at;
+    if (values.status !== l.status || values.note !== (l.note || '') || values.careNote) l.last_contacted_at = l.updated_at;
+    if (values.careNote) {
+      l.care_count = careCount(l) + 1;
+      l.last_care_note = values.careNote;
+    }
     l.customer_name = values.customerName;
     l.status = values.status;
     l.note = values.note;
@@ -1077,6 +1199,7 @@ function updateLead(form) {
       again.status.value = values.status;
       again.note.value = values.note;
       again.followupAt.value = toLocalInput(values.followupAt);
+      again.careNote.value = values.careNote;
       if (values.source) again.source.value = values.source;
       again.contactDate.value = toDateInput(values.contactDate);
       if (again.assignedEmail && values.assignedEmail !== undefined) again.assignedEmail.value = values.assignedEmail;
@@ -1940,11 +2063,23 @@ function switchTab(tab) {
 // ---------- Sự kiện ----------
 
 document.addEventListener('click', (event) => {
-  const el = event.target.closest('[data-filter],[data-open],[data-add-phone],[data-close],[data-claim],[data-copy],[data-quick],[data-tab],[data-reg],[data-reg-range],[data-segment],[data-user-new],[data-user-edit],[data-user-del],[data-status-new],[data-status-edit],[data-status-del],[data-status-move],[data-source-new],[data-source-edit],[data-source-del],[data-source-move],[data-pager]');
+  const el = event.target.closest('[data-filter],[data-open],[data-add-phone],[data-close],[data-claim],[data-copy],[data-quick],[data-tab],[data-reg],[data-reg-range],[data-segment],[data-user-new],[data-user-edit],[data-user-del],[data-status-new],[data-status-edit],[data-status-del],[data-status-move],[data-source-new],[data-source-edit],[data-source-del],[data-source-move],[data-pager],[data-quick-care],[data-note-edit],[data-note-save],[data-note-cancel],[data-note-del]');
   if (!el) return;
   const d = el.dataset;
 
   if (d.pager) goToPage(d.pager, Number(d.page));
+  else if ('quickCare' in d) {
+    const form = $('updateForm');
+    const typed = form.careNote.value.trim();
+    updateLead(form, {
+      careNote: 'Gọi không nghe máy' + (typed ? ': ' + typed : ''),
+      status: 'NO_ANSWER',
+      followupAt: new Date(Date.now() + 2 * 3600 * 1000).toISOString(),
+    });
+  } else if (d.noteEdit) startEditNote(d.noteEdit);
+  else if (d.noteSave) submitEditNote(d.noteSave, el);
+  else if ('noteCancel' in d) loadHistory(...state.openKey.split('|'));
+  else if (d.noteDel) deleteNote(d.noteDel);
   else if (d.tab) switchTab(d.tab);
   else if ('sourceNew' in d) openSourceDialog();
   else if (d.sourceEdit) {

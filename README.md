@@ -62,6 +62,12 @@ lại, lịch sử. Vào bằng link mờ **"Nội bộ"** ở cuối trang đă
   Sheet): thêm / sửa / ẩn / xoá / sắp xếp và chọn nguồn **mặc định** (ban đầu là Facebook) được chọn
   sẵn khi thêm khách. Nguồn `WEB` gắn cho khách tự điền form đăng ký nên không xoá được. Khách cũ
   ghi nguồn bằng chữ ("Nhập tay", "Form đăng ký") vẫn hiện nguyên văn.
+- **Nhật ký chăm sóc**: mỗi lần chăm sóc là một ghi chú riêng (tab `Notes`), đánh số "Lần 1, 2, 3…".
+  Nhập ở ô "Nội dung lần chăm sóc này" rồi LƯU; nút "📞 Gọi không nghe máy" ghi nhanh + hẹn gọi lại
+  sau 2 giờ. Ô "Ghi chú chung" (cột `note`) dành cho thông tin cố định về khách. Bảng hiện số lần +
+  nội dung lần gần nhất (cột `care_count`, `last_care_note` của Leads). SALE sửa được lần của chính
+  mình trong ngày tạo; ADMIN sửa / xoá mọi lần (xoá mềm, cột `deleted`). Mọi lần thêm / sửa / xoá đều
+  ghi vào Activities.
 - **Ngày liên hệ** (cột `contact_date`): chọn khi thêm khách, mặc định là ngày tạo; sửa được trong
   form của khách. Khách cũ chưa có thì hiển thị ngày tạo.
 - Dữ liệu nằm trong cùng Google Sheet, 3 tab tự tạo: **Leads** (mỗi SĐT một dòng, không trùng),
@@ -137,6 +143,9 @@ khách). Hoặc sửa trực tiếp tab **Users** trong Sheet, mỗi người m�
 | Thêm / sửa / khoá / xoá tài khoản (tab Sales) | | ✓ |
 | Thêm / sửa / ẩn / xoá / sắp xếp trạng thái chăm sóc (tab Trạng thái) | | ✓ |
 | Thêm / sửa / ẩn / xoá / sắp xếp nguồn khách, chọn nguồn mặc định (tab Nguồn) | | ✓ |
+| Thêm lần chăm sóc (khách mình phụ trách) | ✓ | ✓ |
+| Sửa lần chăm sóc | Của mình, trong ngày tạo | Tất cả |
+| Xoá lần chăm sóc | | ✓ |
 | Tab Đăng ký (dữ liệu form, tab `DangKy`) | ✓ (CCCD, địa chỉ bị che) | ✓ đầy đủ + Xuất CSV |
 | Tab Hoạt động (lịch sử toàn hệ thống), tab Sales | | ✓ |
 
