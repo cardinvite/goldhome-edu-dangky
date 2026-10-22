@@ -89,6 +89,11 @@ const state = {
   filter: 'all',
   sale: '',
   source: '',
+  createdRange: 'all',
+  createdFrom: '',
+  createdTo: '',
+  deferredSale: '',
+  deferredSource: '',
   query: '',
   openKey: '', // "<segment>|<phone>" của khách đang mở
   segment: loadSegment(),
@@ -211,6 +216,27 @@ function endOfToday() {
 
 function isDone(lead) {
   return DONE_STATUSES.includes(lead.status);
+}
+
+const DEFERRED_STATUSES = ['NO_ANSWER', 'NOT_INTERESTED'];
+function isDeferred(lead) { return DEFERRED_STATUSES.includes(lead.status); }
+function createdDateMatches(lead) {
+  if (state.createdRange === 'all') return true;
+  const date = new Date(lead.created_at);
+  if (isNaN(date)) return false;
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  if (state.createdRange === 'today') { end.setDate(end.getDate() + 1); return date >= start && date < end; }
+  if (state.createdRange === 'yesterday') { start.setDate(start.getDate() - 1); return date >= start && date < end; }
+  if (state.createdRange === 'this_week' || state.createdRange === 'last_week') {
+    const mondayOffset = (start.getDay() + 6) % 7;
+    start.setDate(start.getDate() - mondayOffset + (state.createdRange === 'last_week' ? -7 : 0));
+    end.setTime(start.getTime()); end.setDate(end.getDate() + 7);
+    return date >= start && date < end;
+  }
+  const from = state.createdFrom ? new Date(state.createdFrom + 'T00:00:00') : null;
+  const to = state.createdTo ? new Date(state.createdTo + 'T23:59:59.999') : null;
+  return (!from || date >= from) && (!to || date <= to);
 }
 
 function isDueToday(lead) {
@@ -559,7 +585,7 @@ function getFilters() {
     { key: 'today', label: 'Gọi lại hôm nay', test: isDueToday },
     { key: 'active', label: 'Đang chăm sóc', test: isActive },
     ...Object.keys(STATUS)
-      .filter((key) => STATUS[key].active !== false || leads.some((l) => l.status === key))
+      .filter((key) => !DEFERRED_STATUSES.includes(key) && (STATUS[key].active !== false || leads.some((l) => l.status === key)))
       .map((key) => ({ key, label: STATUS[key].label, test: (l) => l.status === key })),
   ];
 }
@@ -682,11 +708,11 @@ function leadSummary(lead) {
 function visibleLeads() {
   if (state.query.trim()) {
     // Khi tìm kiếm thì tìm trong toàn bộ khách của mảng, bỏ qua bộ lọc.
-    return segLeads().filter((l) => matchQuery(l, state.query));
+    return segLeads().filter((l) => !isDeferred(l) && matchQuery(l, state.query));
   }
   const filters = getFilters();
   const filter = filters.find((f) => f.key === state.filter) || filters[0];
-  const list = segLeads().filter((l) => matchSale(l) && matchSource(l) && filter.test(l));
+  const list = segLeads().filter((l) => !isDeferred(l) && matchSale(l) && matchSource(l) && createdDateMatches(l) && filter.test(l));
   if (state.filter === 'today' || state.filter === 'CALLBACK') {
     return list.sort((a, b) => String(a.next_followup_at).localeCompare(String(b.next_followup_at)));
   }
@@ -737,8 +763,9 @@ function goToPage(name, page) {
   if (!pagers[name]) return;
   pagers[name].page = page;
   if (name === 'leads') renderLeads();
+  else if (name === 'deferred') renderDeferredTab();
   else renderRegs();
-  const table = name === 'leads' ? $('leadRows') : $('regRows');
+  const table = name === 'leads' ? $('leadRows') : name === 'deferred' ? $('deferredRows') : $('regRows');
   table.closest('.table-wrap').scrollIntoView({ block: 'start', behavior: 'smooth' });
 }
 
@@ -747,10 +774,13 @@ function renderLeads() {
   renderStats();
   renderChips();
   renderSearchResult();
+  $('createdRange').value = state.createdRange;
+  $('createdFrom').value = state.createdFrom;
+  $('createdTo').value = state.createdTo;
 
   const list = visibleLeads();
   const paged = paginate('leads', list,
-    [state.segment, state.filter, state.sale, state.source, state.query.trim()].join('|'));
+    [state.segment, state.filter, state.sale, state.source, state.query.trim(), state.createdRange, state.createdFrom, state.createdTo].join('|'));
   const shown = paged.rows;
   $('leadRows').innerHTML = shown.map((lead) => `
     <tr data-open="${esc(lead.phone)}" data-seg="${esc(lead.segment)}" class="${lead.assigned_email === state.me.email ? 'mine' : ''}">
@@ -772,6 +802,28 @@ function renderLeads() {
   // Tab khác cũng hiện sale phụ trách → vẽ lại nếu đang mở.
   if (state.tab === 'sales') renderSalesTab();
   if (state.tab === 'registrations' && state.regs) renderRegs();
+}
+
+function renderDeferredTab() {
+  const sales = [['', 'Tất cả Sales'], ['__none', 'Chưa ai nhận']]
+    .concat(state.users.map((u) => [u.email, u.name + (u.active ? '' : ' (đã khoá)')]));
+  $('deferredSaleFilter').innerHTML = sales.map(([v, label]) => `<option value="${esc(v)}">${esc(label)}</option>`).join('');
+  $('deferredSaleFilter').value = state.deferredSale;
+  const sourceKeys = [...new Set(state.leads.map((l) => l.source).filter(Boolean))];
+  $('deferredSourceFilter').innerHTML = `<option value="">Tất cả nguồn</option>` + sourceKeys.map((k) => `<option value="${esc(k)}">${esc(sourceLabel(k))}</option>`).join('');
+  $('deferredSourceFilter').value = state.deferredSource;
+  const list = segLeads().filter((l) => isDeferred(l)
+    && (!state.deferredSale || (state.deferredSale === '__none' ? !l.assigned_email : l.assigned_email === state.deferredSale))
+    && (!state.deferredSource || l.source === state.deferredSource))
+    .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
+  const paged = paginate('deferred', list, [state.segment, state.deferredSale, state.deferredSource].join('|'));
+  $('deferredRows').innerHTML = paged.rows.map((lead) => `<tr data-open="${esc(lead.phone)}" data-seg="${esc(lead.segment)}">
+    <td data-label="SĐT" class="phone">${esc(lead.phone)}</td><td data-label="Khách hàng">${esc(lead.customer_name) || '-'}</td>
+    <td data-label="Nguồn / Ngày LH">${esc(sourceLabel(lead.source))}<br><span class="muted">${fmtDay(contactOf(lead))}</span></td>
+    <td data-label="Sales">${esc(saleLabel(lead))}</td><td data-label="Trạng thái">${badge(lead.status)}</td>
+    <td data-label="Chăm sóc cuối">${fmtShort(lead.last_contacted_at)}</td><td data-label="Ghi chú" class="note">${esc(lead.last_care_note || lead.note) || '-'}</td></tr>`).join('');
+  $('deferredInfo').textContent = list.length ? `${list.length} khách trong mục Chăm sóc sau.` : 'Chưa có khách trong mục này.';
+  renderPager('deferredPager', 'deferred', paged);
 }
 
 // fresh = bỏ qua cache phía server (nút "Tải lại").
@@ -2048,8 +2100,9 @@ async function moveSource(index, dir) {
 
 function switchTab(tab) {
   document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
-  ['leads', 'registrations', 'activity', 'sales', 'statuses', 'sources'].forEach((t) => { $('tab-' + t).hidden = t !== tab; });
+  ['leads', 'deferred', 'registrations', 'activity', 'sales', 'statuses', 'sources'].forEach((t) => { $('tab-' + t).hidden = t !== tab; });
   state.tab = tab;
+  if (tab === 'deferred') renderDeferredTab();
   if (tab === 'registrations') {
     if (state.regs) renderRegs();
     loadRegistrations(!!state.regs);
@@ -2102,6 +2155,7 @@ document.addEventListener('click', (event) => {
     setSegment(d.segment);
     state.filter = 'all';
     renderLeads();
+    if (state.tab === 'deferred') renderDeferredTab();
   } else if (d.regRange) {
     state.reg.range = d.regRange;
     renderRegs();
@@ -2169,6 +2223,12 @@ $('sourceFilter').addEventListener('change', (event) => {
   state.source = event.target.value;
   renderLeads();
 });
+
+$('createdRange').addEventListener('change', (event) => { state.createdRange = event.target.value; renderLeads(); });
+$('createdFrom').addEventListener('change', (event) => { state.createdRange = 'custom'; $('createdRange').value = 'custom'; state.createdFrom = event.target.value; renderLeads(); });
+$('createdTo').addEventListener('change', (event) => { state.createdRange = 'custom'; $('createdRange').value = 'custom'; state.createdTo = event.target.value; renderLeads(); });
+$('deferredSaleFilter').addEventListener('change', (event) => { state.deferredSale = event.target.value; renderDeferredTab(); });
+$('deferredSourceFilter').addEventListener('change', (event) => { state.deferredSource = event.target.value; renderDeferredTab(); });
 
 $('addBtn').addEventListener('click', () => openAddDialog(normalizePhone(state.query)));
 $('addForm').addEventListener('submit', submitAdd);

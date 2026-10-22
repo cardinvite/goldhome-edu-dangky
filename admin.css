@@ -223,6 +223,9 @@ textarea { resize: vertical; min-height: 100px; }
 .stat.green { --c: var(--green); }
 
 .filters { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 12px; }
+.date-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: -2px 0 14px; color: var(--muted); font-size: .85rem; }
+.date-filters label { display: flex; align-items: center; gap: 6px; }
+.date-filters input { border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; color: var(--ink); background: var(--card-bg); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
 .chip {
   border: 1px solid var(--border);
@@ -377,6 +380,8 @@ td.overdue { color: var(--red); font-weight: 600; }
   .stats { grid-template-columns: repeat(2, 1fr); }
   .filters { flex-direction: column; }
   .sale-filter { width: 100%; }
+  .date-filters { align-items: stretch; }
+  .date-filters select, .date-filters label, .date-filters input { width: 100%; }
   .chips { flex-wrap: nowrap; overflow-x: auto; width: 100%; padding-bottom: 4px; }
   .chip { white-space: nowrap; }
 

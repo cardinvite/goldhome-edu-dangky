@@ -30,6 +30,7 @@
     </div>
     <nav class="tabs" id="tabs">
       <button type="button" data-tab="leads" class="active">Khách hàng</button>
+      <button type="button" data-tab="deferred">Chăm sóc sau</button>
       <button type="button" data-tab="registrations">Đăng ký</button>
       <button type="button" data-tab="activity" data-admin-only>Hoạt động</button>
       <button type="button" data-tab="sales" data-admin-only>Sales</button>
@@ -64,6 +65,15 @@
         <select id="saleFilter" class="sale-filter" aria-label="Lọc theo Sales"></select>
         <select id="sourceFilter" class="sale-filter" aria-label="Lọc theo nguồn"></select>
       </div>
+      <div class="date-filters" aria-label="Lọc theo ngày tạo">
+        <select id="createdRange" class="sale-filter" aria-label="Khoảng ngày tạo">
+          <option value="all">Mọi thời gian</option><option value="today">Hôm nay</option>
+          <option value="yesterday">Hôm qua</option><option value="this_week">Tuần này</option>
+          <option value="last_week">Tuần trước</option><option value="custom">Tùy chọn từ ngày đến ngày</option>
+        </select>
+        <label>Từ <input id="createdFrom" type="date"></label>
+        <label>Đến <input id="createdTo" type="date"></label>
+      </div>
 
       <div class="table-wrap">
         <table class="leads">
@@ -84,6 +94,19 @@
       </div>
       <div id="leadPager" class="pager"></div>
       <p id="listInfo" class="list-info"></p>
+    </section>
+
+    <section id="tab-deferred" hidden>
+      <h2 class="section-title">Chăm sóc sau</h2>
+      <p class="list-info">Khách có trạng thái “Không nghe máy” hoặc “Không có nhu cầu”. Mở từng khách để cập nhật trạng thái khi cần chăm sóc lại.</p>
+      <div class="filters">
+        <select id="deferredSaleFilter" class="sale-filter" aria-label="Lọc khách theo Sales"></select>
+        <select id="deferredSourceFilter" class="sale-filter" aria-label="Lọc khách theo nguồn"></select>
+      </div>
+      <div class="table-wrap">
+        <table class="leads"><thead><tr><th>SĐT</th><th>Khách hàng</th><th>Nguồn / Ngày LH</th><th>Sales phụ trách</th><th>Trạng thái</th><th>Lần chăm sóc cuối</th><th>Ghi chú</th></tr></thead><tbody id="deferredRows"></tbody></table>
+      </div>
+      <div id="deferredPager" class="pager"></div><p id="deferredInfo" class="list-info"></p>
     </section>
 
     <section id="tab-registrations" hidden>
