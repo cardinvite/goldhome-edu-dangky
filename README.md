@@ -68,6 +68,13 @@ lại, lịch sử. Vào bằng link mờ **"Nội bộ"** ở cuối trang đă
   nội dung lần gần nhất (cột `care_count`, `last_care_note` của Leads). SALE sửa được lần của chính
   mình trong ngày tạo; ADMIN sửa / xoá mọi lần (xoá mềm, cột `deleted`). Mọi lần thêm / sửa / xoá đều
   ghi vào Activities.
+- **Import file** (ADMIN, nút "Import file" cạnh "+ Thêm SĐT"): nhập hàng loạt khách từ file Excel
+  (.xls/.xlsx) hoặc CSV — mặc định nhận đúng file Leads tải từ Facebook. Tự nhận cột: `tên_đầy_đủ` →
+  Tên khách, `số_điện_thoại` → SĐT (+84… → 0…), `created_time` → Ngày liên hệ, `khóa_học_quan_tâm_` +
+  `form_name` + `inbox_url` → Ghi chú (VD "Quan tâm: BIM toàn diện (3 bộ môn) · Form: …"). Cột khác (id
+  quảng cáo, chiến dịch…) bỏ qua. Có thể đổi cột ở ô chọn. Chọn mảng (mặc định Đào tạo) + nguồn (mặc định
+  Facebook), xem trước từng dòng rồi bấm Import. Khách mới ở trạng thái "Chưa chăm sóc", chưa giao ai; SĐT
+  sai / đã có trong mảng / trùng trong file thì bỏ qua.
 - **Ngày liên hệ** (cột `contact_date`): chọn khi thêm khách, mặc định là ngày tạo; sửa được trong
   form của khách. Khách cũ chưa có thì hiển thị ngày tạo.
 - Dữ liệu nằm trong cùng Google Sheet, 3 tab tự tạo: **Leads** (mỗi SĐT một dòng, không trùng),
@@ -140,6 +147,7 @@ khách). Hoặc sửa trực tiếp tab **Users** trong Sheet, mỗi người m�
 | Nhận chăm sóc số chưa ai nhận | ✓ | ✓ |
 | Cập nhật trạng thái, ghi chú, hẹn gọi lại | chỉ số mình phụ trách | mọi số |
 | Chuyển khách giữa Sales | | ✓ |
+| Import khách từ file Excel/CSV | | ✓ |
 | Thêm / sửa / khoá / xoá tài khoản (tab Sales) | | ✓ |
 | Thêm / sửa / ẩn / xoá / sắp xếp trạng thái chăm sóc (tab Trạng thái) | | ✓ |
 | Thêm / sửa / ẩn / xoá / sắp xếp nguồn khách, chọn nguồn mặc định (tab Nguồn) | | ✓ |

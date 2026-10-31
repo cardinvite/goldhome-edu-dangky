@@ -291,6 +291,7 @@ td.overdue { color: var(--red); font-weight: 600; }
   padding: 0;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
 }
+.dialog-wide { width: min(960px, calc(100vw - 24px)); }
 .dialog::backdrop { background: rgba(17, 17, 17, 0.55); }
 .dialog-inner { padding: 20px; }
 .dialog-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
@@ -528,3 +529,14 @@ input[readonly] { background: var(--gray-bg); color: var(--muted); }
 .note-edit { margin-top: 6px; }
 .note-edit .dialog-actions { margin-top: 6px; }
 .link.danger-text { color: var(--error); }
+
+/* ---------- Import file ---------- */
+
+.import-map { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 12px; }
+@media (max-width: 720px) { .import-map { grid-template-columns: 1fr 1fr; } }
+.import-preview { max-height: 45vh; overflow: auto; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 12px; }
+.import-preview table { font-size: 0.85rem; }
+.import-preview th, .import-preview td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.import-preview th { position: sticky; top: 0; background: var(--card-bg); }
+.import-preview tr.skip td { color: var(--muted); }
+.import-summary { margin: 0 0 12px; }

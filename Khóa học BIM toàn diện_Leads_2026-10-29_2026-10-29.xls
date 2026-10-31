@@ -1,0 +1,414 @@
+<?xml version="1.0" encoding="UTF-8"?>
+                      <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+                       xmlns:x="urn:schemas-microsoft-com:office:excel"
+                       xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+                       xmlns:html="http://www.w3.org/TR/REC-html40">
+                      <Styles>
+                        <Style ss:ID="s17">
+                          <NumberFormat ss:Format="m/d/yy"/>
+                          <Font ss:FontName="Verdana"/>
+                        </Style>
+                        <Style ss:ID="s18">
+                          <NumberFormat ss:Format="m/d/yy"/>
+                          <Font ss:FontName="Verdana" ss:Bold="1"/>
+                        </Style>
+                        <Style ss:ID="s19">
+                          <NumberFormat ss:Format="m/yy"/>
+                          <Font ss:FontName="Verdana"/>
+                        </Style>
+                        <Style ss:ID="s20">
+                          <NumberFormat ss:Format="m/yy"/>
+                          <Font ss:FontName="Verdana" ss:Bold="1"/>
+                        </Style>
+                        <Style ss:ID="s21">
+                          <NumberFormat ss:Format="m/d/yy h:mm AM/PM"/>
+                          <Font ss:FontName="Verdana"/>
+                        </Style>
+                        <Style ss:ID="s22">
+                          <NumberFormat ss:Format="m/d/yy h:mm AM/PM"/>
+                          <Font ss:FontName="Verdana" ss:Bold="1"/>
+                        </Style>
+                        <Style ss:ID="s23">
+                         <Alignment ss:Horizontal="Right" ss:Vertical="Bottom"/>
+                         <Font ss:FontName="Verdana"/>
+                        </Style>
+                        <Style ss:ID="s24">
+                         <Alignment ss:Horizontal="Right" ss:Vertical="Bottom"/>
+                         <Font ss:FontName="Verdana" ss:Bold="1"/>
+                        </Style>
+                        <Style ss:ID="s25">
+                         <Alignment ss:Horizontal="Left" ss:Vertical="Bottom"/>
+                         <Font ss:FontName="Verdana"/>
+                        </Style>
+                        <Style ss:ID="s26">
+                         <Alignment ss:Horizontal="Left" ss:Vertical="Bottom"/>
+                         <Font ss:FontName="Verdana" ss:Bold="1"/>
+                        </Style>
+                        <Style ss:ID="s27">
+                         <NumberFormat ss:Format="0"/>
+                         <Alignment ss:Horizontal="Right" ss:Vertical="Bottom"/>
+                         <Font ss:FontName="Verdana"/>
+                        </Style>
+                        <Style ss:ID="s28">
+                         <NumberFormat ss:Format="0"/>
+                         <Alignment ss:Horizontal="Right" ss:Vertical="Bottom"/>
+                         <Font ss:FontName="Verdana" ss:Bold="1"/>
+                        </Style>
+                        <Style ss:ID="s29">
+                         <NumberFormat ss:Format="_(&quot;$&quot;* #,##0.00_);_(&quot;$&quot;* (#,##0.00);_(&quot;$&quot;* &quot;-&quot;??_);_(@_)"/>
+                         <Alignment ss:Horizontal="Right" ss:Vertical="Bottom"/>
+                         <Font ss:FontName="Verdana"/>
+                        </Style>
+                        <Style ss:ID="s30">
+                         <NumberFormat ss:Format="_(&quot;$&quot;* #,##0.00_);_(&quot;$&quot;* (#,##0.00);_(&quot;$&quot;* &quot;-&quot;??_);_(@_)"/>
+                         <Alignment ss:Horizontal="Right" ss:Vertical="Bottom"/>
+                         <Font ss:FontName="Verdana" ss:Bold="1"/>
+                        </Style>
+                        <Style ss:ID="s31">
+                         <NumberFormat ss:Format="Percent"/>
+                         <Alignment ss:Horizontal="Right" ss:Vertical="Bottom"/>
+                         <Font ss:FontName="Verdana"/>
+                        </Style>
+                        <Style ss:ID="s32">
+                         <NumberFormat ss:Format="Percent"/>
+                         <Alignment ss:Horizontal="Right" ss:Vertical="Bottom"/>
+                         <Font ss:FontName="Verdana" ss:Bold="1"/>
+                        </Style>
+                        <Style ss:ID="s33">
+                         <NumberFormat ss:Format="YYYY-mm-dd"/>
+                         <Alignment ss:Horizontal="Left" ss:Vertical="Bottom"/>
+                        </Style>
+                        <Style ss:ID="s34">
+                         <Alignment ss:Horizontal="Left" ss:Vertical="Bottom"/>
+                         <Font ss:FontName="Verdana" ss:Bold="1"/>
+                        </Style>
+                        <Style ss:ID="s35">
+                         <Alignment ss:Horizontal="Left" ss:Vertical="Bottom"/>
+                         <Font ss:FontName="Verdana"/>
+                        </Style>
+                        <Style ss:ID="s36">
+                         <Alignment ss:Horizontal="Left" ss:Vertical="Top" ss:WrapText="1"/>
+                         <Font ss:FontName="Verdana"/>
+                        </Style>
+                      </Styles>
+<Worksheet ss:Name="Sheet1">
+<Table>
+<Column ss:Index="1" ss:AutoFitWidth="0" ss:Width="150"/>
+<Column ss:Index="2" ss:AutoFitWidth="0" ss:Width="150"/>
+<Column ss:Index="3" ss:AutoFitWidth="0" ss:Width="150"/>
+<Column ss:Index="4" ss:AutoFitWidth="0" ss:Width="150"/>
+<Column ss:Index="5" ss:AutoFitWidth="0" ss:Width="150"/>
+<Column ss:Index="6" ss:AutoFitWidth="0" ss:Width="150"/>
+<Column ss:Index="7" ss:AutoFitWidth="0" ss:Width="150"/>
+<Column ss:Index="8" ss:AutoFitWidth="0" ss:Width="150"/>
+<Column ss:Index="9" ss:AutoFitWidth="0" ss:Width="150"/>
+<Column ss:Index="10" ss:AutoFitWidth="0" ss:Width="150"/>
+<Column ss:Index="11" ss:AutoFitWidth="0" ss:Width="150"/>
+<Column ss:Index="12" ss:AutoFitWidth="0" ss:Width="150"/>
+<Column ss:Index="13" ss:AutoFitWidth="0" ss:Width="150"/>
+<Column ss:Index="14" ss:AutoFitWidth="0" ss:Width="150"/>
+<Column ss:Index="15" ss:AutoFitWidth="0" ss:Width="150"/>
+<Column ss:Index="16" ss:AutoFitWidth="0" ss:Width="150"/>
+<Column ss:Index="17" ss:AutoFitWidth="0" ss:Width="150"/>
+<Row>
+<Cell ss:StyleID="s24"><Data ss:Type="String">id</Data></Cell>
+<Cell ss:StyleID="s24"><Data ss:Type="String">created_time</Data></Cell>
+<Cell ss:StyleID="s24"><Data ss:Type="String">ad_id</Data></Cell>
+<Cell ss:StyleID="s26"><Data ss:Type="String">ad_name</Data></Cell>
+<Cell ss:StyleID="s24"><Data ss:Type="String">adset_id</Data></Cell>
+<Cell ss:StyleID="s26"><Data ss:Type="String">adset_name</Data></Cell>
+<Cell ss:StyleID="s24"><Data ss:Type="String">campaign_id</Data></Cell>
+<Cell ss:StyleID="s26"><Data ss:Type="String">campaign_name</Data></Cell>
+<Cell ss:StyleID="s24"><Data ss:Type="String">form_id</Data></Cell>
+<Cell ss:StyleID="s26"><Data ss:Type="String">form_name</Data></Cell>
+<Cell ss:StyleID="s26"><Data ss:Type="String">is_organic</Data></Cell>
+<Cell ss:StyleID="s26"><Data ss:Type="String">platform</Data></Cell>
+<Cell ss:StyleID="s26"><Data ss:Type="String">khóa_học_quan_tâm_</Data></Cell>
+<Cell ss:StyleID="s26"><Data ss:Type="String">tên_đầy_đủ</Data></Cell>
+<Cell ss:StyleID="s24"><Data ss:Type="String">số_điện_thoại</Data></Cell>
+<Cell ss:StyleID="s26"><Data ss:Type="String">inbox_url</Data></Cell>
+<Cell ss:StyleID="s26"><Data ss:Type="String">lead_status</Data></Cell>
+</Row>
+
+<Row>
+<Cell ss:StyleID="s25"><Data ss:Type="String">1656938592801020</Data></Cell>
+<Cell ss:StyleID="s17"><Data ss:Type="DateTime">2026-10-30T23:18:18.000</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257542555760211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257542555770211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Nhóm quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257542555780211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Test Lead BIM toàn diện -Start 27-10 - Bản sao</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">2447239719133243</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Khóa học BIM toàn diện</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">false</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">fb</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">bim_toàn_diện_(_3_bộ_môn_)</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Ivan Thương</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">+84909209168</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">https://business.facebook.com/latest/29739402828982983?nav_ref=thread_view_by_psid</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">complete</Data></Cell>
+</Row>
+
+<Row>
+<Cell ss:StyleID="s25"><Data ss:Type="String">1113016581444558</Data></Cell>
+<Cell ss:StyleID="s17"><Data ss:Type="DateTime">2026-10-30T23:07:08.000</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257502315730211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257502315720211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Nhóm quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257502315710211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Test Lead BIM toàn diện -Start 27-10</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">2447239719133243</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Khóa học BIM toàn diện</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">false</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">fb</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">bim_kết_cấu</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Le Van Tuan</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">+84981300588</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">https://business.facebook.com/latest/28956788017295741?nav_ref=thread_view_by_psid</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">complete</Data></Cell>
+</Row>
+
+<Row>
+<Cell ss:StyleID="s25"><Data ss:Type="String">1057380247316179</Data></Cell>
+<Cell ss:StyleID="s17"><Data ss:Type="DateTime">2026-10-30T21:47:03.000</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120250583992140687</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120250583992130687</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Nhóm quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120250583992120687</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Test Lead BIM toàn diện -Start 27-10</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">2447239719133243</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Khóa học BIM toàn diện</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">false</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">fb</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">bim_toàn_diện_(_3_bộ_môn_)</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Lee DaeWoo</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">+84968002983</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">https://business.facebook.com/latest/29498277456436200?nav_ref=thread_view_by_psid</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">complete</Data></Cell>
+</Row>
+
+<Row>
+<Cell ss:StyleID="s27"><Data ss:Type="Number">985210950689917</Data></Cell>
+<Cell ss:StyleID="s17"><Data ss:Type="DateTime">2026-10-30T20:49:59.000</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257542555760211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257542555770211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Nhóm quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257542555780211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Test Lead BIM toàn diện -Start 27-10 - Bản sao</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">2447239719133243</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Khóa học BIM toàn diện</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">false</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">fb</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">bim_toàn_diện_(_3_bộ_môn_)</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Nguyễn Văn Bình</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">+84905341977</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">https://business.facebook.com/latest/29199808943036896?nav_ref=thread_view_by_psid</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">complete</Data></Cell>
+</Row>
+
+<Row>
+<Cell ss:StyleID="s25"><Data ss:Type="String">3425099864359110</Data></Cell>
+<Cell ss:StyleID="s17"><Data ss:Type="DateTime">2026-10-30T20:38:24.000</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120250633907980687</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120250633907990687</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Nhóm quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120250633908000687</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Test Lead BIM toàn diện -Start 27-10 - Bản sao</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">2447239719133243</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Khóa học BIM toàn diện</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">false</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">fb</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">bim_toàn_diện_(_3_bộ_môn_)</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Trúc Hồ Mai</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">+84839672102</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">https://business.facebook.com/latest/28976320448669869?nav_ref=thread_view_by_psid</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">complete</Data></Cell>
+</Row>
+
+<Row>
+<Cell ss:StyleID="s25"><Data ss:Type="String">1473336901319265</Data></Cell>
+<Cell ss:StyleID="s17"><Data ss:Type="DateTime">2026-10-30T20:06:01.000</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257511450800211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257511450810211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Nhóm quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257511450790211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Test Lead BIM toàn diện -Start 27-10 - Bản sao</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">2447239719133243</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Khóa học BIM toàn diện</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">false</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">fb</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">bim_toàn_diện_(_3_bộ_môn_)</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Van Tuyen Do</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">+84943899166</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">https://business.facebook.com/latest/28639077452454234?nav_ref=thread_view_by_psid</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">complete</Data></Cell>
+</Row>
+
+<Row>
+<Cell ss:StyleID="s25"><Data ss:Type="String">2537218326774991</Data></Cell>
+<Cell ss:StyleID="s17"><Data ss:Type="DateTime">2026-10-30T19:12:23.000</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120250583992140687</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120250583992130687</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Nhóm quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120250583992120687</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Test Lead BIM toàn diện -Start 27-10</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">2447239719133243</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Khóa học BIM toàn diện</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">false</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">fb</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">bim_kiến_trúc_</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Phia Ris Rolls</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">+84896118933</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">https://business.facebook.com/latest/29355296930763106?nav_ref=thread_view_by_psid</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">complete</Data></Cell>
+</Row>
+
+<Row>
+<Cell ss:StyleID="s25"><Data ss:Type="String">1796147481721692</Data></Cell>
+<Cell ss:StyleID="s17"><Data ss:Type="DateTime">2026-10-30T13:35:13.000</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257511450800211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257511450810211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Nhóm quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257511450790211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Test Lead BIM toàn diện -Start 27-10 - Bản sao</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">2447239719133243</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Khóa học BIM toàn diện</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">false</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">fb</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">bim_toàn_diện_(_3_bộ_môn_)</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Phạm Quốc Bảo</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">+84913501840</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">https://business.facebook.com/latest/28818065604526962?nav_ref=thread_view_by_psid</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">complete</Data></Cell>
+</Row>
+
+<Row>
+<Cell ss:StyleID="s25"><Data ss:Type="String">4268489310038476</Data></Cell>
+<Cell ss:StyleID="s17"><Data ss:Type="DateTime">2026-10-30T12:16:26.000</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257502315730211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257502315720211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Nhóm quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257502315710211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Test Lead BIM toàn diện -Start 27-10</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">2447239719133243</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Khóa học BIM toàn diện</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">false</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">fb</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">bim_toàn_diện_(_3_bộ_môn_)</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Tuan Nguyen</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">+84907800600</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">https://business.facebook.com/latest/40253640094227296?nav_ref=thread_view_by_psid</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">complete</Data></Cell>
+</Row>
+
+<Row>
+<Cell ss:StyleID="s25"><Data ss:Type="String">1113456861096286</Data></Cell>
+<Cell ss:StyleID="s17"><Data ss:Type="DateTime">2026-10-30T12:13:39.000</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257542555760211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257542555770211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Nhóm quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257542555780211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Test Lead BIM toàn diện -Start 27-10 - Bản sao</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">2447239719133243</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Khóa học BIM toàn diện</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">false</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">fb</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">bim_toàn_diện_(_3_bộ_môn_)</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Nguyễn Đức Mạnh</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">+84987610039</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">https://business.facebook.com/latest/28817411481223652?nav_ref=thread_view_by_psid</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">complete</Data></Cell>
+</Row>
+
+<Row>
+<Cell ss:StyleID="s25"><Data ss:Type="String">2292178388292560</Data></Cell>
+<Cell ss:StyleID="s17"><Data ss:Type="DateTime">2026-10-30T10:01:59.000</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257542555760211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257542555770211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Nhóm quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257542555780211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Test Lead BIM toàn diện -Start 27-10 - Bản sao</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">2447239719133243</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Khóa học BIM toàn diện</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">false</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">fb</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">bim_toàn_diện_(_3_bộ_môn_)</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Trần Sinh</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">+84964701726</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">https://business.facebook.com/latest/28851444507872237?nav_ref=thread_view_by_psid</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">complete</Data></Cell>
+</Row>
+
+<Row>
+<Cell ss:StyleID="s25"><Data ss:Type="String">1842041746797665</Data></Cell>
+<Cell ss:StyleID="s17"><Data ss:Type="DateTime">2026-10-30T05:22:02.000</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120250583992140687</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120250583992130687</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Nhóm quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120250583992120687</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Test Lead BIM toàn diện -Start 27-10</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">2447239719133243</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Khóa học BIM toàn diện</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">false</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">fb</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">bim_toàn_diện_(_3_bộ_môn_)</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Nhien Pham</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">+84916072107</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">https://business.facebook.com/latest/27913263211683925?nav_ref=thread_view_by_psid</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">complete</Data></Cell>
+</Row>
+
+<Row>
+<Cell ss:StyleID="s25"><Data ss:Type="String">1481740113869919</Data></Cell>
+<Cell ss:StyleID="s17"><Data ss:Type="DateTime">2026-10-30T04:58:22.000</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257502315730211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257502315720211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Nhóm quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257502315710211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Test Lead BIM toàn diện -Start 27-10</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">2447239719133243</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Khóa học BIM toàn diện</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">false</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">fb</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">bim_toàn_diện_(_3_bộ_môn_)</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Huynh Sang</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">+84987025822</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">https://business.facebook.com/latest/28779671001698651?nav_ref=thread_view_by_psid</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">complete</Data></Cell>
+</Row>
+
+<Row>
+<Cell ss:StyleID="s25"><Data ss:Type="String">1494707559379830</Data></Cell>
+<Cell ss:StyleID="s17"><Data ss:Type="DateTime">2026-10-30T03:52:14.000</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257502315730211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257502315720211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Nhóm quảng cáo Khách hàng tiềm năng mới</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">120257502315710211</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Test Lead BIM toàn diện -Start 27-10</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">2447239719133243</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Khóa học BIM toàn diện</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">false</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">fb</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">bim_toàn_diện_(_3_bộ_môn_)</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">Nguyễn Huy</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">+84966183112</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">https://business.facebook.com/latest/39708074952172862?nav_ref=thread_view_by_psid</Data></Cell>
+<Cell ss:StyleID="s25"><Data ss:Type="String">complete</Data></Cell>
+</Row>
+</Table>
+</Worksheet>
+</Workbook>

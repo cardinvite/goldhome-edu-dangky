@@ -53,6 +53,8 @@
       <div class="toolbar">
         <input id="searchInput" class="search" type="search" inputmode="tel" autocomplete="off"
                placeholder="Tìm theo số điện thoại hoặc tên khách...">
+        <button type="button" id="importBtn" class="btn ghost" data-admin-only
+                title="Nhập khách từ file Excel/CSV (VD: file Leads tải từ Facebook)">Import file</button>
         <button type="button" id="addBtn" class="btn primary">+ Thêm SĐT</button>
       </div>
 
@@ -292,6 +294,10 @@
       <button type="submit" class="btn primary" id="addSubmit">Thêm khách</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="importDialog" class="dialog dialog-wide">
+  <div id="importDialogBody"></div>
 </dialog>
 
 <div id="toast" class="toast" role="status" hidden></div>

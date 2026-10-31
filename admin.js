@@ -1,5 +1,5 @@
 // Giống WEB_APP_URL trong script.js — cùng một Apps Script Web App.
-const API_URL = 'https://script.google.com/macros/s/AKfycbyBsjbtVrh9AloNSxRB0UdPsqPMQiX-f2mFg9HUEpWfW42-pfMSOXnDCWACWjPazd9PvA/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbwhZLtfELmiUxeZ9TEjS0HI0gnXNRZWuZOOOMLQZIL15BiWcWxITOfy-fLjVlcEFRoHew/exec';
 // OAuth Client ID tạo trong Google Cloud Console — xem README.md.
 const GOOGLE_CLIENT_ID = '884064042089-drsbl39b8utv2rttar95aaoea45pstt8.apps.googleusercontent.com';
 
@@ -1391,6 +1391,271 @@ async function submitAdd(event) {
   }
 }
 
+// ---------- Import file (ADMIN) ----------
+// Đọc file Excel/CSV ngay trên trình duyệt (SheetJS), map cột rồi gửi các dòng lên action importLeads.
+// Mặc định nhận đúng file Leads tải từ Facebook (Ads Manager / Meta Business Suite → Tải xuống .xls/.csv).
+
+const SHEETJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+const IMPORT_CHUNK = 300;
+
+// Tên cột đã chuẩn hoá (bỏ dấu, chữ thường) → field. Thứ tự = ưu tiên khi tự nhận cột.
+const IMPORT_FIELDS = [
+  { key: 'name', label: 'Họ tên', match: [/^(ten day du|full name|ho va ten|ho ten)$/, /^(ten khach hang|ten khach|ten|name|khach hang)$/] },
+  { key: 'phone', label: 'Số điện thoại', required: true, match: [/^(so dien thoai|phone number|phone|sdt|so dt|dien thoai)$/, /dien thoai|phone|sdt/] },
+  { key: 'date', label: 'Ngày liên hệ', match: [/^created time$/, /^(thoi gian|ngay dang ky|ngay lien he|ngay tao|created at|date)$/] },
+  { key: 'course', label: 'Khóa học quan tâm', match: [/khoa hoc quan tam/, /khoa hoc/] },
+];
+// Cột phụ (chỉ file Facebook) — tự thêm vào ghi chú nếu có.
+const IMPORT_EXTRAS = [
+  { key: 'form', label: 'Form', match: /^form name$/ },
+  { key: 'inbox', label: 'Inbox', match: /^inbox url$/ },
+];
+
+let importState = null;
+
+function loadSheetJs() {
+  if (window.XLSX) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = SHEETJS_URL;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('Không tải được thư viện đọc Excel. Kiểm tra mạng rồi thử lại.'));
+    document.head.appendChild(s);
+  });
+}
+
+function normHeader(value) {
+  return String(value ?? '').toLowerCase().replace(/đ/g, 'd').normalize('NFD')
+    .replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function detectColumn(headers, patterns, taken) {
+  for (const re of patterns) {
+    const i = headers.findIndex((h, idx) => !taken.includes(idx) && re.test(h));
+    if (i >= 0) return i;
+  }
+  return -1;
+}
+
+// Facebook ghi đáp án trắc nghiệm dạng "bim_toàn_diện_(_3_bộ_môn_)" → "BIM toàn diện (3 bộ môn)".
+function prettyAnswer(value) {
+  const s = String(value ?? '').replace(/_/g, ' ').replace(/\s+/g, ' ')
+    .replace(/\(\s+/g, '(').replace(/\s+\)/g, ')').trim()
+    .replace(/(^|\s)(bim|mep|cad)(?=\s|$)/gi, (m, sp, w) => sp + w.toUpperCase());
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// Date (xlsx) / "2026-10-30T23:18:18.000" / "2026-10-30 23:18" / "30/10/2026 23:18" → ISO, sai → ''.
+function parseImportDate(value) {
+  if (value instanceof Date) return isNaN(value) ? '' : value.toISOString();
+  const s = String(value ?? '').trim();
+  if (!s) return '';
+  const vn = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  const d = vn
+    ? new Date(+vn[3], vn[2] - 1, +vn[1], +(vn[4] || 0), +(vn[5] || 0), +(vn[6] || 0))
+    : new Date(s.replace(/^(\d{4}-\d{2}-\d{2}) /, '$1T'));
+  return isNaN(d) ? '' : d.toISOString();
+}
+
+function openImportDialog() {
+  importState = null;
+  const sourceKey = SOURCES.FACEBOOK && SOURCES.FACEBOOK.active !== false ? 'FACEBOOK' : defaultSourceKey();
+  $('importDialogBody').innerHTML = `
+    <div class="dialog-inner">
+      <div class="dialog-head">
+        <div>
+          <h2>Import khách từ file</h2>
+          <div class="sub">File Excel (.xls, .xlsx) hoặc CSV — VD: file Leads tải từ Facebook. Dòng đầu là tên cột.</div>
+        </div>
+        <button type="button" class="icon-btn" data-close aria-label="Đóng">×</button>
+      </div>
+      <div class="field-row">
+        <label class="field">
+          <span>Mảng</span>
+          <select id="importSegment">${Object.keys(SEGMENTS).map((k) =>
+            `<option value="${esc(k)}" ${k === 'DAO_TAO' ? 'selected' : ''}>${esc(segLabel(k))}</option>`).join('')}</select>
+        </label>
+        <label class="field">
+          <span>Nguồn</span>
+          <select id="importSource">${sourceOptions(sourceKey)}</select>
+        </label>
+      </div>
+      <label class="field">
+        <span>Chọn file <span class="req">*</span></span>
+        <input id="importFile" type="file" accept=".xls,.xlsx,.csv,.txt">
+      </label>
+      <div id="importBody"></div>
+    </div>`;
+  $('importFile').addEventListener('change', (e) => readImportFile(e.target.files[0]));
+  $('importSegment').addEventListener('change', renderImportPreview);
+  $('importDialog').showModal();
+}
+
+async function readImportFile(file) {
+  if (!file) return;
+  const body = $('importBody');
+  body.innerHTML = '<p class="hint">Đang đọc file…</p>';
+  try {
+    await loadSheetJs();
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const table = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' })
+      .filter((r) => r.some((c) => String(c).trim() !== ''));
+    if (table.length < 2) throw new Error('File không có dữ liệu (cần dòng tên cột + ít nhất 1 dòng khách).');
+    const headers = table[0].map((h) => String(h).trim());
+    const normed = headers.map(normHeader);
+    const map = {};
+    const taken = [];
+    IMPORT_FIELDS.forEach((f) => {
+      map[f.key] = detectColumn(normed, f.match, taken);
+      if (map[f.key] >= 0) taken.push(map[f.key]);
+    });
+    IMPORT_EXTRAS.forEach((f) => { map[f.key] = normed.findIndex((h) => f.match.test(h)); });
+    importState = { fileName: file.name, headers, rows: table.slice(1), map };
+    renderImportMapping();
+  } catch (err) {
+    console.error(err);
+    body.innerHTML = `<p class="hint bad">${esc(err.message || 'Không đọc được file.')}</p>`;
+  }
+}
+
+function renderImportMapping() {
+  const { headers, map } = importState;
+  const options = (current) => '<option value="-1">— Không lấy —</option>' + headers.map((h, i) =>
+    `<option value="${i}" ${i === current ? 'selected' : ''}>${esc(h || 'Cột ' + (i + 1))}</option>`).join('');
+  $('importBody').innerHTML = `
+    <div class="import-map">
+      ${IMPORT_FIELDS.map((f) => `
+        <label class="field">
+          <span>${esc(f.label)}${f.required ? ' <span class="req">*</span>' : ''}</span>
+          <select data-import-map="${f.key}">${options(map[f.key])}</select>
+        </label>`).join('')}
+    </div>
+    <div id="importPreview"></div>`;
+  $('importBody').querySelectorAll('[data-import-map]').forEach((sel) => {
+    sel.addEventListener('change', () => {
+      importState.map[sel.dataset.importMap] = Number(sel.value);
+      renderImportPreview();
+    });
+  });
+  renderImportPreview();
+}
+
+// Dòng file → dữ liệu gửi lên + trạng thái dự kiến (máy chủ kiểm tra lại trùng).
+function buildImportRows() {
+  const { rows, map } = importState;
+  const segment = $('importSegment').value;
+  const cell = (r, key) => (map[key] >= 0 ? r[map[key]] : '');
+  const seen = new Set();
+  return rows.map((r) => {
+    const rawPhone = String(cell(r, 'phone')).trim();
+    const phone = normalizePhone(rawPhone);
+    const course = prettyAnswer(cell(r, 'course'));
+    const form = String(cell(r, 'form')).trim();
+    const inbox = String(cell(r, 'inbox')).trim();
+    const note = [
+      [course && 'Quan tâm: ' + course, form && 'Form: ' + form].filter(Boolean).join(' · '),
+      inbox && 'Inbox: ' + inbox,
+    ].filter(Boolean).join('\n');
+    let status = 'NEW';
+    if (!phone) status = 'INVALID';
+    else if (findLead(segment, phone)) status = 'EXISTS';
+    else if (seen.has(phone)) status = 'DUP_IN_FILE';
+    if (phone) seen.add(phone);
+    return {
+      status,
+      rawPhone,
+      course,
+      payload: {
+        phone,
+        customerName: String(cell(r, 'name')).trim(),
+        note,
+        contactDate: parseImportDate(cell(r, 'date')),
+      },
+    };
+  });
+}
+
+const IMPORT_STATUS = {
+  NEW: '<span class="hint ok">Thêm mới</span>',
+  EXISTS: '<span class="muted">Đã có — bỏ qua</span>',
+  DUP_IN_FILE: '<span class="muted">Trùng trong file — bỏ qua</span>',
+  INVALID: '<span class="hint bad">SĐT sai — bỏ qua</span>',
+};
+
+function renderImportPreview() {
+  if (!importState) return;
+  const box = $('importPreview');
+  if (importState.map.phone < 0) {
+    box.innerHTML = '<p class="hint bad">Chưa chọn cột Số điện thoại.</p>';
+    return;
+  }
+  const items = buildImportRows();
+  importState.items = items;
+  const count = (s) => items.filter((it) => it.status === s).length;
+  const fresh = count('NEW');
+  const segment = $('importSegment').value;
+  box.innerHTML = `
+    <p class="import-summary">
+      <strong>${esc(importState.fileName)}</strong>: ${items.length} dòng —
+      <span class="hint ok">${fresh} thêm mới</span>${count('EXISTS') ? ` · ${count('EXISTS')} đã có trong mảng ${esc(segLabel(segment))}` : ''}${count('DUP_IN_FILE') ? ` · ${count('DUP_IN_FILE')} trùng trong file` : ''}${count('INVALID') ? ` · <span class="hint bad">${count('INVALID')} SĐT sai</span>` : ''}
+    </p>
+    <div class="import-preview">
+      <table>
+        <thead><tr><th>#</th><th>SĐT</th><th>Họ tên</th><th>Khóa học quan tâm</th><th>Ngày liên hệ</th><th>Kết quả</th></tr></thead>
+        <tbody>${items.map((it, i) => `
+          <tr class="${it.status === 'NEW' ? '' : 'skip'}">
+            <td>${i + 2}</td>
+            <td>${esc(it.payload.phone || it.rawPhone || '-')}</td>
+            <td>${esc(it.payload.customerName || '-')}</td>
+            <td>${esc(it.course || '-')}</td>
+            <td>${it.payload.contactDate ? fmtFull(it.payload.contactDate) : '<span class="muted">Hôm nay</span>'}</td>
+            <td>${IMPORT_STATUS[it.status]}</td>
+          </tr>`).join('')}</tbody>
+      </table>
+    </div>
+    <p class="hint">Khách mới vào trạng thái “${esc(STATUS.NEW?.label || 'Chưa chăm sóc')}”, chưa giao cho ai. Cột khác của file không được lưu.</p>
+    <div class="dialog-actions">
+      <button type="button" class="btn ghost" data-close>Huỷ</button>
+      <button type="button" class="btn primary" id="importRun" ${fresh ? '' : 'disabled'}>Import ${fresh} khách</button>
+    </div>`;
+  $('importRun').addEventListener('click', runImport);
+}
+
+async function runImport() {
+  const segment = $('importSegment').value;
+  const source = $('importSource').value;
+  const rows = importState.items.filter((it) => it.status === 'NEW').map((it) => it.payload);
+  const button = $('importRun');
+  button.disabled = true;
+  setSyncing(true);
+  let created = 0;
+  let skipped = 0;
+  try {
+    for (let i = 0; i < rows.length; i += IMPORT_CHUNK) {
+      button.textContent = `Đang import ${Math.min(i + IMPORT_CHUNK, rows.length)}/${rows.length}…`;
+      const data = await api('importLeads', { segment, source, rows: rows.slice(i, i + IMPORT_CHUNK) });
+      data.created.forEach((lead) => {
+        createdLeads.add(lead.segment + '|' + lead.phone);
+        upsertLead(lead);
+      });
+      created += data.created.length;
+      skipped += data.skipped.length;
+    }
+    $('importDialog').close();
+    setSegment(segment);
+    renderLeads();
+    toast(`Đã import ${created} khách vào mảng ${segLabel(segment)}${skipped ? ` (bỏ qua ${skipped} số trùng/sai)` : ''}.`, 'success');
+  } catch (err) {
+    renderLeads();
+    toast((created ? `Đã import ${created} khách, sau đó lỗi: ` : '') + err.message, 'error');
+    // Khách đã import được hiện thành "Đã có" → bấm lại chỉ gửi phần còn lại.
+    renderImportPreview();
+  } finally {
+    setSyncing(false);
+  }
+}
+
 // ---------- Tab Đăng ký (dữ liệu form, tab DangKy) ----------
 
 const REG_RANGES = [
@@ -2231,6 +2496,7 @@ $('deferredSaleFilter').addEventListener('change', (event) => { state.deferredSa
 $('deferredSourceFilter').addEventListener('change', (event) => { state.deferredSource = event.target.value; renderDeferredTab(); });
 
 $('addBtn').addEventListener('click', () => openAddDialog(normalizePhone(state.query)));
+$('importBtn').addEventListener('click', openImportDialog);
 $('addForm').addEventListener('submit', submitAdd);
 $('addForm').phone.addEventListener('input', checkAddPhone);
 $('refreshBtn').addEventListener('click', () => {

@@ -203,6 +203,9 @@ function dispatch_(action, body, user) {
       return listData_(body.since);
     case 'create':
       return createLead_(body, user);
+    case 'importLeads':
+      requireAdmin_(user);
+      return importLeads_(body, user);
     case 'claim':
       return claimLead_(body.segment, body.phone, user);
     case 'update':
@@ -600,6 +603,64 @@ function createLead_(body, user) {
     leadsSheet_().appendRow(leadToRow_(lead));
     logActivity_(lead, user, 'CREATE', '', lead.status, lead.note, '', lead.assigned_email);
     return { lead: serializeLead_(lead) };
+  });
+}
+
+// Import hàng loạt (VD: file Leads tải từ Facebook). Trang admin đã đọc file và gửi lên
+// rows = [{ phone, customerName, note, contactDate }]. Bỏ qua SĐT sai / đã có trong mảng / trùng trong file.
+var IMPORT_MAX_ROWS = 1000;
+
+function importLeads_(body, user) {
+  var segment = parseSegment_(body.segment);
+  var source = body.source ? parseSource_(body.source) : defaultSource_();
+  var rows = Array.isArray(body.rows) ? body.rows : [];
+  if (!rows.length) throw new ApiError('BAD_REQUEST', 'File không có dòng dữ liệu nào.');
+  if (rows.length > IMPORT_MAX_ROWS) {
+    throw new ApiError('BAD_REQUEST', 'Mỗi lần import tối đa ' + IMPORT_MAX_ROWS + ' dòng.');
+  }
+
+  return withLock_(function () {
+    var seen = {};
+    readLeads_().forEach(function (l) { if (l.segment === segment) seen[l.phone] = 'EXISTS'; });
+    var now = new Date();
+    var created = [];
+    var skipped = [];
+    rows.forEach(function (r, i) {
+      var phone = normalizePhone_(r.phone);
+      var reason = !phone ? 'INVALID' : seen[phone] ? (seen[phone] === 'EXISTS' ? 'EXISTS' : 'DUP_IN_FILE') : '';
+      if (reason) {
+        skipped.push({ index: i, phone: phone || cleanText_(r.phone, 30), reason: reason });
+        return;
+      }
+      seen[phone] = 'NEW';
+      created.push({
+        phone: phone,
+        customer_name: cleanText_(r.customerName, 100),
+        assigned_email: '',
+        status: 'NEW',
+        note: cleanText_(r.note, 1000),
+        last_contacted_at: '',
+        next_followup_at: '',
+        created_at: now,
+        updated_at: now,
+        source: source,
+        created_by: user.email,
+        segment: segment,
+        contact_date: parseDate_(r.contactDate) || now
+      });
+    });
+
+    if (created.length) {
+      var sheet = leadsSheet_();
+      sheet.getRange(sheet.getLastRow() + 1, 1, created.length, LEAD_COLS.length)
+        .setValues(created.map(leadToRow_));
+      var log = getSheet_(ACTIVITIES_SHEET, ACTIVITY_COLS);
+      log.getRange(log.getLastRow() + 1, 1, created.length, ACTIVITY_COLS.length).setValues(created.map(function (l) {
+        return [now, "'" + l.phone, user.email, sheetSafe_(user.name), 'CREATE',
+          '', 'NEW', sheetSafe_('Import từ file. ' + l.note), '', '', segment];
+      }));
+    }
+    return { created: created.map(serializeLead_), skipped: skipped };
   });
 }
 
