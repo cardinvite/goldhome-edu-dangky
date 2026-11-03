@@ -998,9 +998,9 @@ function careDateOf(note) {
   return note.care_date || note.created_at || '';
 }
 
-// Máy chủ trả mới nhất trước → đảo lại để bảng hiện lần 1, lần 2, lần 3...
+// Máy chủ đã trả mới nhất trước → bảng hiện từ trái qua phải: lần 3, lần 2, lần 1.
 function careLog(lead) {
-  return [...(lead.notes || [])].reverse();
+  return lead.notes || [];
 }
 
 // Nhật ký chăm sóc ngay trên bảng chính, mỗi lần một dòng.
@@ -1009,11 +1009,12 @@ function careLogCell(lead) {
   if (!notes.length) {
     return careCount(lead) ? `<span class="muted">${careCount(lead)} lần</span>` : '<span class="muted">-</span>';
   }
-  return `<div class="care-log-box">${notes.map((n) => `
-    <div class="care-line" title="${esc(`Lần ${n.no} · ${fmtDay(careDateOf(n))} · ${n.user_name || userName(n.user_email)}\n${n.note}`)}">
+  // Lần mới nhất hiện cả nội dung; các lần trước thu gọn còn "Lần N · ngày" (hover xem đủ).
+  return `<div class="care-log-box">${notes.map((n, i) => `
+    <div class="care-line${i ? ' compact' : ''}" title="${esc(`Lần ${n.no} · ${fmtDay(careDateOf(n))} · ${n.user_name || userName(n.user_email)}\n${n.note}`)}">
       <span class="care-no">Lần ${n.no}</span>
       <span class="care-when">${fmtDay(careDateOf(n))}</span>
-      <span class="care-what">${esc(n.note) || '-'}</span>
+      ${i ? '' : `<span class="care-what">${esc(n.note) || '-'}</span>`}
     </div>`).join('')}</div>`;
 }
 
