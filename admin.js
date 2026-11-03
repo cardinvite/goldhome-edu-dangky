@@ -1,5 +1,5 @@
 // Giống WEB_APP_URL trong script.js — cùng một Apps Script Web App.
-const API_URL = 'https://script.google.com/macros/s/AKfycbzVK7PBnTUAxOJUd3-44rB9QvmJAYWOM9ng-YjO2xIniQIzm9zkJRFz1kUuIx0VWLTBUg/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbzGFGet6R8iuidVIcrTWoUfef-HGgMUxDCGBwvQpe2XPI4RszW8Ti494iWRiOBBbKrA5A/exec';
 // OAuth Client ID tạo trong Google Cloud Console — xem README.md.
 const GOOGLE_CLIENT_ID = '884064042089-drsbl39b8utv2rttar95aaoea45pstt8.apps.googleusercontent.com';
 
