@@ -72,6 +72,17 @@ var FORM_SOURCE = 'WEB';
 // nên chỉ trường hợp sửa tay trực tiếp trong Sheet mới thấy dữ liệu cũ (tối đa CACHE_SECONDS,
 // hoặc bấm "Tải lại" trên trang để đọc thẳng Sheet). Users giữ ngắn để khoá tài khoản có hiệu lực nhanh.
 var CACHE_SECONDS = { leads: 600, statuses: 600, sources: 600, regs: 600, users: 60, history: 600 };
+// Đổi số này mỗi khi cấu trúc dữ liệu đưa vào cache thay đổi (VD: thêm "notes" vào từng khách).
+// Khoá cache có kèm schema nên bản cũ (thiếu trường mới) tự bị bỏ, không cần đợi hết hạn.
+var CACHE_SCHEMA = 'v2';
+
+function verKey_(name) {
+  return CACHE_SCHEMA + '_' + name + '_ver';
+}
+
+function dataKey_(name, ver) {
+  return CACHE_SCHEMA + '_' + name + '_' + ver;
+}
 
 // Bộ nhớ tạm trong một lần chạy (Apps Script khởi tạo lại biến toàn cục mỗi request).
 var memo_ = {};
@@ -1524,11 +1535,11 @@ function prefetchCache_(names) {
   memo_.prefetched = {};
   try {
     var cache = CacheService.getScriptCache();
-    var vers = cache.getAll(names.map(function (n) { return n + '_ver'; }));
-    var withVer = names.filter(function (n) { return vers[n + '_ver']; });
+    var vers = cache.getAll(names.map(verKey_));
+    var withVer = names.filter(function (n) { return vers[verKey_(n)]; });
     if (!withVer.length) return;
     var prefix = {};
-    withVer.forEach(function (n) { prefix[n] = n + '_' + vers[n + '_ver']; });
+    withVer.forEach(function (n) { prefix[n] = dataKey_(n, vers[verKey_(n)]); });
     var counts = cache.getAll(withVer.map(function (n) { return prefix[n] + '_n'; }));
     var keys = [];
     withVer.forEach(function (n) {
@@ -1558,18 +1569,18 @@ function cachedJson_(name, build, ttl) {
     return JSON.parse(pre);
   }
   var cache = CacheService.getScriptCache();
-  var ver = cache.get(name + '_ver');
+  var ver = cache.get(verKey_(name));
   if (ver) {
-    var hit = getChunks_(cache, name + '_' + ver);
+    var hit = getChunks_(cache, dataKey_(name, ver));
     if (hit) return JSON.parse(hit);
   } else {
     ver = Utilities.getUuid();
-    cache.put(name + '_ver', ver, 21600);
+    cache.put(verKey_(name), ver, 21600);
   }
   var data = build();
   try {
-    if (cache.get(name + '_ver') === ver) {
-      putChunks_(cache, name + '_' + ver, JSON.stringify(data), ttl || CACHE_SECONDS[name] || 60);
+    if (cache.get(verKey_(name)) === ver) {
+      putChunks_(cache, dataKey_(name, ver), JSON.stringify(data), ttl || CACHE_SECONDS[name] || 60);
     }
   } catch (err) {
     console.warn('Không ghi được cache ' + name + ': ' + err);
@@ -1582,8 +1593,8 @@ function cachedJson_(name, build, ttl) {
 function patchLeadsCache_(lead) {
   try {
     var cache = CacheService.getScriptCache();
-    var ver = cache.get('leads_ver');
-    var hit = ver && getChunks_(cache, 'leads_' + ver);
+    var ver = cache.get(verKey_('leads'));
+    var hit = ver && getChunks_(cache, dataKey_('leads', ver));
     if (!hit) return false;
     var list = JSON.parse(hit);
     var found = false;
@@ -1596,8 +1607,8 @@ function patchLeadsCache_(lead) {
     }
     if (!found) list.push(lead); // khách mới nằm cuối Sheet
     var newVer = Utilities.getUuid();
-    if (!putChunks_(cache, 'leads_' + newVer, JSON.stringify(list), CACHE_SECONDS.leads)) return false;
-    cache.put('leads_ver', newVer, 21600);
+    if (!putChunks_(cache, dataKey_('leads', newVer), JSON.stringify(list), CACHE_SECONDS.leads)) return false;
+    cache.put(verKey_('leads'), newVer, 21600);
     return true;
   } catch (err) {
     console.warn('Không cập nhật được cache leads: ' + err);
@@ -1607,7 +1618,7 @@ function patchLeadsCache_(lead) {
 
 function invalidateCache_(name) {
   if (memo_.prefetched) delete memo_.prefetched[name];
-  CacheService.getScriptCache().put(name + '_ver', Utilities.getUuid(), 21600);
+  CacheService.getScriptCache().put(verKey_(name), Utilities.getUuid(), 21600);
 }
 
 // CacheService giới hạn 100KB/giá trị → chia nhỏ (30k ký tự ≤ 90KB kể cả tiếng Việt 3 byte/ký tự).

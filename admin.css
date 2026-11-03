@@ -263,15 +263,25 @@ textarea { resize: vertical; min-height: 100px; }
   background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: 12px;
-  overflow-x: auto;
+  /* Cuộn trong khung (không cuộn cả trang): thanh scroll ngang luôn nằm ở đáy khung,
+     nhìn thấy ngay mà không phải kéo xuống dòng cuối của danh sách. */
+  overflow: auto;
+  max-height: 70vh;
 }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
 th { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.3px; color: var(--muted); background: #faf8f3; white-space: nowrap; }
+/* Dính tiêu đề khi cuộn dọc. border-collapse: collapse làm mất viền của ô dính → dùng box-shadow. */
+.table-wrap thead th { position: sticky; top: 0; z-index: 2; border-bottom: 0; box-shadow: inset 0 -1px 0 var(--border); }
+/* Dính cột SĐT khi kéo ngang, để luôn biết đang xem khách nào. */
+.leads thead th:first-child { left: 0; z-index: 3; }
+.leads td.phone { position: sticky; left: 0; z-index: 1; background: var(--card-bg); }
+.leads tbody tr:hover td.phone { background: #fdf8e8; }
 tbody tr:last-child td { border-bottom: 0; }
 .leads tbody tr { cursor: pointer; }
 .leads tbody tr:hover { background: #fdf8e8; }
-.leads tbody tr.mine td:first-child { box-shadow: inset 3px 0 0 var(--primary); }
+.leads tbody tr.mine td:first-child { box-shadow: inset 3px 0 0 var(--primary), 1px 0 0 var(--border); }
+.leads tbody tr:not(.mine) td.phone { box-shadow: 1px 0 0 var(--border); }
 td.phone { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 td.note { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
 /* Cột "Nhật ký chăm sóc": các lần xếp ngang, mới nhất bên trái (lần 3 · 2 · 1).
@@ -399,7 +409,10 @@ td.overdue { color: var(--red); font-weight: 600; }
   .chips { flex-wrap: nowrap; overflow-x: auto; width: 100%; padding-bottom: 4px; }
   .chip { white-space: nowrap; }
 
-  /* Bảng khách → dạng thẻ */
+  /* Bảng khách → dạng thẻ: bỏ cuộn trong khung và các ô dính */
+  .table-wrap { max-height: none; overflow: visible; }
+  .leads td.phone { position: static; background: none; box-shadow: none; }
+  .leads tbody tr:not(.mine) td.phone { box-shadow: none; }
   .leads thead { display: none; }
   .leads, .leads tbody, .leads tr, .leads td { display: block; }
   .leads tr { padding: 10px 12px; border-bottom: 1px solid var(--border); }

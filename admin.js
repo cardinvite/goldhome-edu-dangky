@@ -7,6 +7,9 @@ const SESSION_KEY = 'goldhome_admin_session';
 // Bản sao dữ liệu lần trước (theo phiên) để mở trang hiện ngay, rồi cập nhật ngầm. Xoá khi đăng xuất.
 // Không lưu dữ liệu tab Đăng ký (có CCCD).
 const SNAPSHOT_KEY = 'goldhome_admin_snapshot';
+// Đổi số này khi cấu trúc dữ liệu khách thay đổi (VD: thêm "notes" cho nhật ký chăm sóc trên bảng)
+// → bản sao cũ (thiếu trường mới) bị bỏ, trang tải lại toàn bộ từ máy chủ.
+const SNAPSHOT_VERSION = 2;
 const AUTO_REFRESH_MS = 60 * 1000;
 // Tự tải lại chỉ lấy khách thay đổi; cứ FULL_SYNC_MS thì tải toàn bộ một lần
 // (để thấy cả thay đổi sửa tay trong Sheet — loại này không cập nhật updated_at).
@@ -488,6 +491,7 @@ function saveSnapshot() {
   if (!state.me || !state.token) return;
   try {
     localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({
+      version: SNAPSHOT_VERSION,
       token: state.token,
       data: {
         me: state.me, users: state.users, statuses: state.statuses, sources: state.sources, leads: state.leads,
@@ -500,7 +504,8 @@ function saveSnapshot() {
 function loadSnapshot(token) {
   try {
     const snap = JSON.parse(localStorage.getItem(SNAPSHOT_KEY) || 'null');
-    return snap && snap.token === token ? snap.data : null;
+    if (!snap || snap.token !== token || snap.version !== SNAPSHOT_VERSION) return null;
+    return snap.data;
   } catch (err) {
     return null;
   }
@@ -782,7 +787,9 @@ function goToPage(name, page) {
   else if (name === 'deferred') renderDeferredTab();
   else renderRegs();
   const table = name === 'leads' ? $('leadRows') : name === 'deferred' ? $('deferredRows') : $('regRows');
-  table.closest('.table-wrap').scrollIntoView({ block: 'start', behavior: 'smooth' });
+  const wrap = table.closest('.table-wrap');
+  wrap.scrollTop = 0; // khung bảng tự cuộn → đổi trang thì về đầu trang mới
+  wrap.scrollIntoView({ block: 'start', behavior: 'smooth' });
 }
 
 function renderLeads() {
@@ -1173,11 +1180,23 @@ async function loadHistory(segment, phone) {
     // Đang sửa một lần chăm sóc thì không vẽ lại (mất nội dung đang gõ).
     if (!document.querySelector('#notesList .note-edit')) showNotes(key, data.notes || []);
   };
+  // Nhật ký của hộp thoại là bản mới nhất từ máy chủ → cập nhật luôn vào khách trong danh sách,
+  // để cột "Nhật ký chăm sóc" trên bảng không bị thiếu khi dữ liệu danh sách còn là bản cũ.
+  const syncNotesToLead = (notes) => {
+    if (!Array.isArray(notes) || pendingLeads.has(key)) return;
+    const lead = findLead(segment, phone);
+    if (!lead || JSON.stringify(lead.notes || []) === JSON.stringify(notes)) return;
+    lead.notes = notes;
+    lead.care_count = notes.length;
+    saveSnapshot();
+    renderLeads();
+  };
   if (historyCache.has(key)) show(historyCache.get(key));
   try {
     const data = await api('history', { segment, phone });
     historyCache.set(key, data);
     show(data);
+    syncNotesToLead(data.notes);
   } catch (err) {
     if (!historyCache.has(key) && $('historyList')) {
       $('historyList').innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
