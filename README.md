@@ -64,10 +64,13 @@ lại, lịch sử. Vào bằng link mờ **"Nội bộ"** ở cuối trang đă
   ghi nguồn bằng chữ ("Nhập tay", "Form đăng ký") vẫn hiện nguyên văn.
 - **Nhật ký chăm sóc**: mỗi lần chăm sóc là một ghi chú riêng (tab `Notes`), đánh số "Lần 1, 2, 3…".
   Nhập ở ô "Nội dung lần chăm sóc này" rồi LƯU; nút "📞 Gọi không nghe máy" ghi nhanh + hẹn gọi lại
-  sau 2 giờ. Ô "Ghi chú chung" (cột `note`) dành cho thông tin cố định về khách. Bảng hiện số lần +
-  nội dung lần gần nhất (cột `care_count`, `last_care_note` của Leads). SALE sửa được lần của chính
-  mình trong ngày tạo; ADMIN sửa / xoá mọi lần (xoá mềm, cột `deleted`). Mọi lần thêm / sửa / xoá đều
-  ghi vào Activities.
+  sau 2 giờ. Ô "Ghi chú chung" (cột `note`) dành cho thông tin cố định về khách.
+  **Ngày chăm sóc** (cột `care_date`) chọn được ngay dưới ô nội dung, mặc định là ngày thêm; sửa lại
+  được khi sửa lần chăm sóc đó (lần cũ chưa có `care_date` thì tính theo ngày thêm).
+  Bảng khách có cột **Nhật ký chăm sóc** (cạnh cột Ghi chú) liệt kê đủ "Lần 1 · ngày · nội dung",
+  "Lần 2 · …" — nhiều lần thì cuộn trong ô; cột `care_count`, `last_care_note` của Leads vẫn giữ để
+  thống kê nhanh. SALE sửa được lần của chính mình trong ngày tạo; ADMIN sửa / xoá mọi lần (xoá mềm,
+  cột `deleted`). Mọi lần thêm / sửa / xoá đều ghi vào Activities.
 - **Import file** (ADMIN, nút "Import file" cạnh "+ Thêm SĐT"): nhập hàng loạt khách từ file Excel
   (.xls/.xlsx) hoặc CSV — mặc định nhận đúng file Leads tải từ Facebook. Tự nhận cột: `tên_đầy_đủ` →
   Tên khách, `số_điện_thoại` → SĐT (+84… → 0…), `created_time` → Ngày liên hệ, `khóa_học_quan_tâm_` +

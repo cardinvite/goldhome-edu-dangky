@@ -196,6 +196,22 @@ function fmtDay(iso) {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}${year}`;
 }
 
+// dd/MM/yyyy (luôn có năm) — dùng cho nhật ký trong hộp thoại.
+function fmtDayFull(iso) {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  if (isNaN(d)) return '-';
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+function sameDay(a, b) {
+  if (!a || !b) return false;
+  const x = new Date(a);
+  const y = new Date(b);
+  if (isNaN(x) || isNaN(y)) return false;
+  return x.toDateString() === y.toDateString();
+}
+
 function toDateInput(iso) {
   const d = iso ? new Date(iso) : new Date();
   if (isNaN(d)) return '';
@@ -791,7 +807,8 @@ function renderLeads() {
       <td data-label="Trạng thái">${badge(lead.status)}</td>
       <td data-label="Chăm sóc cuối">${fmtShort(lead.last_contacted_at)}</td>
       <td data-label="Gọi lại" class="${followupClass(lead)}">${fmtShort(lead.next_followup_at)}</td>
-      <td data-label="Ghi chú" class="note">${careCount(lead) ? `<span class="care-count">${careCount(lead)} lần</span> ` : ''}${esc(lead.last_care_note || lead.note) || '-'}</td>
+      <td data-label="Ghi chú" class="note">${esc(lead.note) || '-'}</td>
+      <td data-label="Nhật ký" class="care-log">${careLogCell(lead)}</td>
     </tr>`).join('');
 
   let info = '';
@@ -902,6 +919,10 @@ function renderLeadDialog(lead) {
           <span>Nội dung lần chăm sóc này <span class="muted">(lần ${careCount(lead) + 1})</span></span>
           <textarea name="careNote" rows="3" placeholder="VD: Đã gọi, khách hỏi giá gói thiết kế, hẹn gửi báo giá..."></textarea>
         </label>
+        <label class="field care-date-field">
+          <span>Ngày chăm sóc <span class="muted">(mặc định hôm nay)</span></span>
+          <input name="careDate" type="date" value="${toDateInput('')}">
+        </label>
         ${STATUS.NO_ANSWER && STATUS.NO_ANSWER.active !== false ? `
         <button type="button" class="btn ghost" data-quick-care>📞 Gọi không nghe máy (hẹn lại sau 2 giờ)</button>` : ''}
       </div>
@@ -962,14 +983,38 @@ function renderLeadDialog(lead) {
       ${assignment}
       ${form}
       <h3 class="history-title">Nhật ký chăm sóc <span class="muted" id="notesCount">${careCount(lead) ? `(${careCount(lead)} lần)` : ''}</span></h3>
-      <div id="notesList" class="notes"><p class="muted">Đang tải...</p></div>
+      <div id="notesList" class="notes">${lead.notes ? renderNotes(lead.notes) : '<p class="muted">Đang tải...</p>'}</div>
       <h3 class="history-title">Lịch sử thay đổi</h3>
       <div id="historyList" class="timeline"><p class="muted">Đang tải...</p></div>
     </div>`;
 }
 
 function careCount(lead) {
-  return Number(lead.care_count) || 0;
+  return lead.notes ? lead.notes.length : Number(lead.care_count) || 0;
+}
+
+// Ngày chăm sóc do sales chọn; lần cũ chưa có thì lấy ngày thêm.
+function careDateOf(note) {
+  return note.care_date || note.created_at || '';
+}
+
+// Máy chủ trả mới nhất trước → đảo lại để bảng hiện lần 1, lần 2, lần 3...
+function careLog(lead) {
+  return [...(lead.notes || [])].reverse();
+}
+
+// Nhật ký chăm sóc ngay trên bảng chính, mỗi lần một dòng.
+function careLogCell(lead) {
+  const notes = careLog(lead);
+  if (!notes.length) {
+    return careCount(lead) ? `<span class="muted">${careCount(lead)} lần</span>` : '<span class="muted">-</span>';
+  }
+  return `<div class="care-log-box">${notes.map((n) => `
+    <div class="care-line" title="${esc(`Lần ${n.no} · ${fmtDay(careDateOf(n))} · ${n.user_name || userName(n.user_email)}\n${n.note}`)}">
+      <span class="care-no">Lần ${n.no}</span>
+      <span class="care-when">${fmtDay(careDateOf(n))}</span>
+      <span class="care-what">${esc(n.note) || '-'}</span>
+    </div>`).join('')}</div>`;
 }
 
 // ---------- Nhật ký chăm sóc ----------
@@ -989,7 +1034,8 @@ function renderNotes(notes) {
   return notes.map((n) => `
     <div class="note-item" data-note-id="${esc(n.id)}">
       <div class="note-head">
-        <strong>Lần ${n.no}</strong> · ${fmtFull(n.created_at)} · ${esc(n.user_name || userName(n.user_email))}
+        <strong>Lần ${n.no}</strong> · ${fmtDayFull(careDateOf(n))} · ${esc(n.user_name || userName(n.user_email))}
+        ${sameDay(careDateOf(n), n.created_at) ? '' : `<span class="muted" title="Thời điểm ghi vào hệ thống">(thêm ${fmtFull(n.created_at)})</span>`}
         ${n.updated_at ? `<span class="muted" title="Sửa lúc ${fmtFull(n.updated_at)} bởi ${esc(userName(n.updated_by))}">(đã sửa)</span>` : ''}
         <span class="note-actions">
           ${canEditNote(n) ? `<button type="button" class="link" data-note-edit="${esc(n.id)}">Sửa</button>` : ''}
@@ -1017,6 +1063,10 @@ function startEditNote(id) {
   item.querySelector('.note-text').outerHTML = `
     <div class="note-edit">
       <textarea rows="3">${esc(n.note)}</textarea>
+      <label class="field note-date-field">
+        <span>Ngày chăm sóc</span>
+        <input type="date" class="note-date" value="${toDateInput(careDateOf(n))}">
+      </label>
       <div class="dialog-actions">
         <button type="button" class="btn ghost" data-note-cancel>Huỷ</button>
         <button type="button" class="btn primary" data-note-save="${esc(id)}">Lưu</button>
@@ -1046,10 +1096,12 @@ async function saveNote(action, id, extra = {}) {
 }
 
 function submitEditNote(id, button) {
-  const text = button.closest('.note-edit').querySelector('textarea').value.trim();
+  const box = button.closest('.note-edit');
+  const text = box.querySelector('textarea').value.trim();
   if (!text) return toast('Nội dung không được để trống.', 'error');
+  const careDate = fromDateInput(box.querySelector('.note-date').value);
   button.disabled = true;
-  saveNote('editNote', id, { note: text });
+  saveNote('editNote', id, { note: text, careDate });
 }
 
 function deleteNote(id) {
@@ -1212,6 +1264,7 @@ function updateLead(form, overrides = {}) {
     note: form.note.value.trim(),
     followupAt: form.followupAt.value ? new Date(form.followupAt.value).toISOString() : '',
     careNote: form.careNote.value.trim(),
+    careDate: fromDateInput(form.careDate.value) || new Date().toISOString(),
     ...overrides,
   };
   if (form.assignedEmail) values.assignedEmail = form.assignedEmail.value; // chỉ ADMIN có ô này
@@ -1224,8 +1277,14 @@ function updateLead(form, overrides = {}) {
   runLeadAction('update', { segment, phone, ...values }, 'Đã lưu.', (l) => {
     if (values.status !== l.status || values.note !== (l.note || '') || values.careNote) l.last_contacted_at = l.updated_at;
     if (values.careNote) {
-      l.care_count = careCount(l) + 1;
+      const no = careCount(l) + 1;
+      l.care_count = no;
       l.last_care_note = values.careNote;
+      // Hiện ngay trên bảng, máy chủ trả về sẽ ghi đè bằng bản thật.
+      l.notes = [{
+        id: 'pending', no, created_at: l.updated_at, care_date: values.careDate,
+        note: values.careNote, user_email: state.me.email, user_name: state.me.name, updated_at: '',
+      }, ...(l.notes || [])];
     }
     l.customer_name = values.customerName;
     l.status = values.status;
@@ -1252,6 +1311,7 @@ function updateLead(form, overrides = {}) {
       again.note.value = values.note;
       again.followupAt.value = toLocalInput(values.followupAt);
       again.careNote.value = values.careNote;
+      again.careDate.value = toDateInput(values.careDate);
       if (values.source) again.source.value = values.source;
       again.contactDate.value = toDateInput(values.contactDate);
       if (again.assignedEmail && values.assignedEmail !== undefined) again.assignedEmail.value = values.assignedEmail;

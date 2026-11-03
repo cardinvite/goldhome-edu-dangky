@@ -18,8 +18,9 @@ var USER_COLS = ['email', 'name', 'role', 'active'];
 // Nhật ký chăm sóc: mỗi lần chăm sóc một dòng (sửa được, xoá mềm bằng cột deleted).
 // Tab Activities vẫn là nhật ký chỉ ghi thêm (ghi lại cả lúc thêm / sửa / xoá).
 var NOTES_SHEET = 'Notes';
+// care_date = ngày chăm sóc (chọn được, mặc định là ngày thêm). Dòng cũ trống → dùng created_at.
 var NOTE_COLS = ['id', 'created_at', 'segment', 'phone', 'user_email', 'user_name', 'note',
-  'updated_at', 'updated_by', 'deleted'];
+  'updated_at', 'updated_by', 'deleted', 'care_date'];
 // Thứ tự cột của tab DangKy (do Code.gs ghi khi khách gửi form).
 var REG_SHEET = 'DangKy';
 var REG_COLS = ['created_at', 'name', 'birthday', 'cccd', 'address', 'phone', 'zalo',
@@ -566,6 +567,7 @@ function serializeLead_(lead) {
   var out = {};
   LEAD_COLS.forEach(function (col) { out[col] = serializeValue_(lead[col]); });
   out.assigned_name = lead.assigned_email ? nameOf_(lead.assigned_email) : '';
+  out.notes = leadNotes_(lead);
   return out;
 }
 
@@ -704,6 +706,9 @@ function updateLead_(body, user) {
     var extra = [];
     var assignNote = '';
     var careNote = cleanText_(body.careNote, 2000);
+    // Ngày chăm sóc chọn được; không gửi lên thì lấy lúc lưu.
+    var careDate = parseDate_(body.careDate);
+    if (body.careDate && !careDate) throw new ApiError('BAD_REQUEST', 'Ngày chăm sóc không hợp lệ.');
 
     // ADMIN chuyển sales phụ trách ngay trong form (cùng lần LƯU).
     if (body.assignedEmail !== undefined) {
@@ -783,7 +788,7 @@ function updateLead_(body, user) {
     if (statusChanged || noteChanged || careNote) lead.last_contacted_at = now;
     lead.updated_at = now;
     if (careNote) {
-      appendNote_(lead, user, careNote, now);
+      appendNote_(lead, user, careNote, now, careDate || now);
       lead.care_count = (Number(lead.care_count) || 0) + 1;
       lead.last_care_note = careNote;
     }
@@ -1211,12 +1216,45 @@ function notesCacheName_(segment, phone) {
   return 'notes_' + segment + '_' + phone;
 }
 
-function appendNote_(lead, user, note, now) {
-  getSheet_(NOTES_SHEET, NOTE_COLS).appendRow([
-    Utilities.getUuid(), now, segmentOf_(lead.segment), "'" + lead.phone, user.email, sheetSafe_(user.name),
-    sheetSafe_(note), '', '', false
-  ]);
-  markDirty_(notesCacheName_(segmentOf_(lead.segment), lead.phone));
+function appendNote_(lead, user, note, now, careDate) {
+  var segment = segmentOf_(lead.segment);
+  var row = [
+    Utilities.getUuid(), now, segment, "'" + lead.phone, user.email, sheetSafe_(user.name),
+    sheetSafe_(note), '', '', false, careDate || now
+  ];
+  getSheet_(NOTES_SHEET, NOTE_COLS).appendRow(row);
+  pushNotesIndex_(segment, lead.phone, row);
+  markDirty_(notesCacheName_(segment, lead.phone));
+}
+
+// Toàn bộ lần chăm sóc (chưa xoá) theo "mảng|SĐT" — đọc cả tab Notes một lần, để danh sách
+// khách kèm luôn nhật ký chăm sóc (bảng chính hiện lần 1, lần 2...).
+function notesIndex_() {
+  if (memo_.notesIndex) return memo_.notesIndex;
+  var index = {};
+  readRows_(getSheet_(NOTES_SHEET, NOTE_COLS), NOTE_COLS).forEach(function (n) {
+    if (String(n.deleted).toLowerCase() === 'true') return;
+    var phone = normalizePhone_(n.phone);
+    if (!phone) return;
+    var key = segmentOf_(n.segment) + '|' + phone;
+    (index[key] = index[key] || []).push(n);
+  });
+  memo_.notesIndex = index;
+  return index;
+}
+
+// Vừa ghi thêm một dòng Notes: cập nhật index đang giữ trong bộ nhớ, khỏi đọc lại cả tab.
+function pushNotesIndex_(segment, phone, row) {
+  if (!memo_.notesIndex) return;
+  var n = {};
+  NOTE_COLS.forEach(function (col, j) { n[col] = row[j]; });
+  n.phone = phone;
+  var key = segment + '|' + phone;
+  (memo_.notesIndex[key] = memo_.notesIndex[key] || []).push(n);
+}
+
+function leadNotes_(lead) {
+  return serializeNotes_(notesIndex_()[segmentOf_(lead.segment) + '|' + lead.phone] || []);
 }
 
 // Các lần chăm sóc (chưa xoá) của một khách, cũ → mới, kèm số dòng trong Sheet.
@@ -1253,6 +1291,8 @@ function serializeNotes_(rows) {
       user_email: String(n.user_email || '').toLowerCase(),
       user_name: String(n.user_name || ''),
       note: String(n.note || ''),
+      // Dòng cũ chưa có care_date → ngày thêm.
+      care_date: serializeValue_(n.care_date) || serializeValue_(n.created_at),
       updated_at: serializeValue_(n.updated_at),
       updated_by: String(n.updated_by || '')
     };
@@ -1266,9 +1306,10 @@ function readLeadNotes_(segment, phone) {
 }
 
 // Sau khi sửa / xoá: tính lại số lần và nội dung lần gần nhất trên dòng Leads.
+// Luôn ghi lại dòng Leads (kể cả khi số lần không đổi) để updated_at mới → máy khác
+// tải đồng bộ theo "since" cũng nhận được nhật ký chăm sóc đã sửa.
 function refreshLeadCare_(lead, rows, now) {
   var latest = rows.length ? String(rows[rows.length - 1].note || '') : '';
-  if (Number(lead.care_count) === rows.length && String(lead.last_care_note || '') === latest) return;
   lead.care_count = rows.length;
   lead.last_care_note = latest;
   lead.updated_at = now;
@@ -1285,6 +1326,8 @@ function findNote_(rows, id) {
 function editNote_(body, user) {
   var text = cleanText_(body.note, 2000);
   if (!text) throw new ApiError('BAD_REQUEST', 'Nội dung không được để trống.');
+  var careDate = parseDate_(body.careDate);
+  if (body.careDate && !careDate) throw new ApiError('BAD_REQUEST', 'Ngày chăm sóc không hợp lệ.');
   return withLock_(function () {
     var lead = mustFindLead_(body.segment, body.phone);
     var rows = readNoteRows_(lead.segment, lead.phone);
@@ -1299,14 +1342,26 @@ function editNote_(body, user) {
     }
     var now = new Date();
     var old = String(n.note || '');
-    if (text !== old) {
+    // Dòng cũ chưa có care_date thì coi ngày chăm sóc là ngày thêm.
+    var oldCare = n.care_date instanceof Date ? n.care_date
+      : n.created_at instanceof Date ? n.created_at : null;
+    var careChanged = !!careDate && (!oldCare || dayOf_(oldCare) !== dayOf_(careDate));
+    if (text !== old || careChanged) {
       var sheet = getSheet_(NOTES_SHEET, NOTE_COLS);
       var noteCol = NOTE_COLS.indexOf('note') + 1;
       sheet.getRange(n._row, noteCol, 1, 3).setValues([[sheetSafe_(text), now, user.email]]);
       n.note = text;
+      if (careChanged) {
+        sheet.getRange(n._row, NOTE_COLS.indexOf('care_date') + 1).setValue(careDate);
+        n.care_date = careDate;
+      }
+      memo_.notesIndex = null;
       markDirty_(notesCacheName_(lead.segment, lead.phone));
+      var changes = [];
+      if (text !== old) changes.push(old + '\n→ ' + text);
+      if (careChanged) changes.push('Ngày chăm sóc: ' + (oldCare ? dayOf_(oldCare) : '-') + ' → ' + dayOf_(careDate));
       logActivity_(lead, user, 'NOTE_EDIT', '', '',
-        'Sửa lần chăm sóc ' + (rows.indexOf(n) + 1) + ':\n' + old + '\n→ ' + text, '', '');
+        'Sửa lần chăm sóc ' + (rows.indexOf(n) + 1) + ':\n' + changes.join('\n'), '', '');
       refreshLeadCare_(lead, rows, now);
     }
     return { lead: serializeLead_(lead), notes: serializeNotes_(rows) };
@@ -1322,6 +1377,7 @@ function deleteNote_(body, user) {
     var sheet = getSheet_(NOTES_SHEET, NOTE_COLS);
     var col = NOTE_COLS.indexOf('updated_at') + 1;
     sheet.getRange(n._row, col, 1, 3).setValues([[now, user.email, true]]);
+    memo_.notesIndex = null;
     markDirty_(notesCacheName_(lead.segment, lead.phone));
     logActivity_(lead, user, 'NOTE_DELETE', '', '',
       'Xoá lần chăm sóc ' + (rows.indexOf(n) + 1) + ': ' + String(n.note || ''), '', '');

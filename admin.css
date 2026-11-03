@@ -274,6 +274,13 @@ tbody tr:last-child td { border-bottom: 0; }
 .leads tbody tr.mine td:first-child { box-shadow: inset 3px 0 0 var(--primary); }
 td.phone { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 td.note { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+/* Cột "Nhật ký chăm sóc": mỗi lần một dòng, nhiều lần thì cuộn trong ô. */
+td.care-log { max-width: 320px; }
+.care-log-box { display: flex; flex-direction: column; gap: 2px; max-height: 108px; overflow-y: auto; }
+.care-line { display: flex; gap: 6px; align-items: baseline; font-size: 0.82rem; line-height: 1.45; min-width: 0; }
+.care-no { flex: none; font-weight: 700; color: var(--primary-dark); }
+.care-when { flex: none; color: var(--muted); font-variant-numeric: tabular-nums; }
+.care-what { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 td.today { color: var(--orange); font-weight: 600; }
 td.overdue { color: var(--red); font-weight: 600; }
 .list-info { color: var(--muted); font-size: 0.85rem; }
@@ -395,6 +402,9 @@ td.overdue { color: var(--red); font-weight: 600; }
   .leads td.phone { font-size: 1.05rem; }
   .leads td.phone::before { content: none; }
   td.note { max-width: none; white-space: normal; }
+  .leads td.care-log { max-width: none; flex-direction: column; gap: 2px; }
+  .care-log-box { max-height: none; overflow: visible; }
+  .care-what { white-space: normal; overflow: visible; }
   .leads tbody tr.mine td:first-child { box-shadow: none; }
   .leads tbody tr.mine { box-shadow: inset 3px 0 0 var(--primary); }
 }
@@ -519,7 +529,8 @@ input[readonly] { background: var(--gray-bg); color: var(--muted); }
 /* Nhật ký chăm sóc */
 .care-box { background: #fffbeb; border: 1px solid #f3e1a6; border-radius: 10px; padding: 12px 12px 4px; margin-bottom: 14px; }
 .care-box .btn { margin-bottom: 8px; }
-.care-count { display: inline-block; font-size: 0.75rem; font-weight: 700; color: var(--primary-dark); background: #fff4d0; border-radius: 999px; padding: 1px 8px; margin-right: 4px; }
+.care-date-field { max-width: 220px; }
+.note-date-field { margin-top: 6px; max-width: 200px; }
 .notes { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
 .note-item { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: #fff; }
 .note-head { font-size: 0.82rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; }
