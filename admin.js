@@ -809,13 +809,13 @@ function renderLeads() {
     <tr data-open="${esc(lead.phone)}" data-seg="${esc(lead.segment)}" class="${lead.assigned_email === state.me.email ? 'mine' : ''}">
       <td data-label="SĐT" class="phone">${esc(lead.phone)}</td>
       <td data-label="Khách hàng">${esc(lead.customer_name) || '-'}</td>
-      <td data-label="Nguồn" class="nowrap">${esc(sourceLabel(lead.source))}<br><span class="muted">${fmtDay(contactOf(lead))}</span></td>
-      <td data-label="Sales">${esc(saleLabel(lead))}</td>
       <td data-label="Trạng thái">${badge(lead.status)}</td>
       <td data-label="Chăm sóc cuối">${fmtShort(lead.last_contacted_at)}</td>
       <td data-label="Gọi lại" class="${followupClass(lead)}">${fmtShort(lead.next_followup_at)}</td>
       <td data-label="Ghi chú" class="note">${esc(lead.note) || '-'}</td>
       <td data-label="Nhật ký" class="care-log">${careLogCell(lead)}</td>
+      <td data-label="Nguồn" class="nowrap">${esc(sourceLabel(lead.source))}<br><span class="muted">${fmtDay(contactOf(lead))}</span></td>
+      <td data-label="Sales">${esc(saleLabel(lead))}</td>
     </tr>`).join('');
 
   let info = '';
